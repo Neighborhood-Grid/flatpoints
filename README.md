@@ -14,7 +14,7 @@ flatpoints gives you two mappings:
 - **indexes**: pixelisation of the (u,v) isomap to fill a square image. Each cell `[i, j]` of the image 
   holds the index of a point in the cloud.
 
-![all models](plots/all_plots.png)
+![horse](plots/horse.png)
 
 ## Install
 
