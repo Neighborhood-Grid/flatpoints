@@ -8,7 +8,7 @@ points = np.load("data/dragon_points.npy")
 ```
 
 **Orientation.** All clouds share one convention: **z up**, **x left-right** (the object's
-own left-right axis), y front-back. The defaults of `flatten` and `plot` (`lateral="x"`,
+own left-right axis), y front-back. The defaults of `Flat` (`lateral="x"`,
 z up) therefore show every model upright. The original models were rotated (proper rotations
 only, no mirroring) to follow this convention; the clouds in their original orientation are
 kept in `original/`:
