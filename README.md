@@ -39,8 +39,6 @@ fp.plot(out, points)     # 3D view + (u, v) of each face
 fp.imshow(out, points)   # the grids as images
 ```
 
-For closed surfaces, flatpoints split  the surface into two hemispheres, `left` and `right`, each with its own grid.
-
 ## How it works
 
 0. **Split** the cloud into two equal hemispheres, at the median of the `lateral` axis.
