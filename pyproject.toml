@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flatpoints"
+version = "0.1.0"
+description = "Arrange a point cloud on square grids: neighbours on the grid are neighbours on the surface"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "gridpoints",
+]
+
+[project.optional-dependencies]
+viz = ["matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
