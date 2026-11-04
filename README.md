@@ -67,7 +67,7 @@ Flatpoints provides the missing parametrisation which allow to work on the laten
 Because it maps the 2D unit square to the point cloud surface through the `to_image` paradygm, one
 just needs to sample points on the 2D unit square and then transport them to the surface
 by bilinear interpolation, (row, col) -> xyz.
-By default, the 2D points are a window of a hyperuniform seed (blue noise), so the new points are evenly spread
+By default, flatpoints.Resampler use hyperuniform 2D seeds (blue noise), so the new points are evenly spread
 over the surface.
 
 ```python
