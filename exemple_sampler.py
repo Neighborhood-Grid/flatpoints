@@ -11,7 +11,7 @@ MODELS = ["airplane", "armadillo", "bunny", "cow", "dragon", "everest", "horse",
           "max_planck", "spot"]
 
 
-def resample(model, n=256, seed=None):
+def resample(model, n=256, seed=42):
     points = np.load(f"data/{model}_points.npy")  # (N, 3)
     everest = model == "everest"  # open surface: a single face, seen from above
     return fp.Resampler(points, n=n, seed=seed, single_face=everest,
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     else:
         # Every model, with the hyperuniform seed,
         random = np.random.default_rng(0).random((2 ** 17, 2))
-        seed, name  = None, "resampled"
+        seed, name  = 42, "resampled"
         fig, axes = plt.subplots(3, 3, figsize=(15, 15), layout="constrained")
         for m, ax in zip(MODELS, axes.ravel()):
             sampler = resample(m, n=256, seed=seed)

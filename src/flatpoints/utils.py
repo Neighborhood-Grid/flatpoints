@@ -5,6 +5,7 @@ Everything here is plumbing around the algorithm of `core`: no geodesics, no fla
 import gridpoints
 import numpy as np
 from typing import NamedTuple
+from pathlib import Path
 
 # Landmark positions (row, col), as fractions of the grid side: 4 corners, 4 edge middles,
 # centre, and the centres of the 4 quarter squares (13 in total).
@@ -17,6 +18,9 @@ ROTATION_SAMPLES = 50
 
 # Number of 3D nearest neighbours used to smooth (u, v) (smoothing=True).
 KNN = 16
+
+
+# === Flattening ====
 
 def axes(lateral, up):
     """Indices (0, 1 or 2) of the lateral and up axes; up=None picks the default (the
@@ -150,3 +154,41 @@ class Corners(NamedTuple):
     """Padding of the grids: copy points[idxs[k]] into pixel pixels[k]."""
     idxs: np.ndarray    # (Npadding,) index in the point cloud of the point to copy
     pixels: np.ndarray  # (Npadding, 3) (face, row, col) where to copy it
+
+# === Resampling ====
+
+SEED = Path(__file__).resolve().parents[2] / "data" / "seed.npy"  # (2**17, 2) hyperuniform
+
+def _window(seed, n, offset, valid):
+    """The `n` points of `seed` closest to `offset` in the square (Chebyshev, towards +x,
+    +y on the torus) whose nearest pixel is `valid`, as (row, col) on the (m, m) grid
+    `valid`: the square [offset, offset + side)^2 is rescaled to [0, m - 1]^2.
+
+    Returns:
+        rc: (n, 2) row, col; side: side of the window in the seed.
+    """
+    x = (seed - offset) % 1.0
+    order = np.argsort(x.max(1))
+    x, d = x[order], x.max(1)[order]
+    m, k = len(valid), n
+    while True:
+        if k > len(x):
+            raise ValueError(f"the seed is too small for {n} points on this surface")
+        side = (d[k - 1] + d[k]) / 2 if k < len(x) else 1.0
+        rc = x[:k] / side * (m - 1)
+        ok = valid[tuple(np.clip(np.rint(rc).astype(int), 0, m - 1).T)]
+        if ok.sum() >= n:
+            return rc[ok][:n], side
+        k += n - ok.sum()
+
+def _seeds(seed, names):
+    """{face name: (M, 2) points in [0, 1)^2} from the `seed` argument of `Resampler`."""
+    if isinstance(seed, (int, np.integer)) and not isinstance(seed, bool):
+        shifts = np.random.default_rng(seed).random((len(names), 2))
+        hyperuniform = np.load(SEED).astype(float)
+        return {name: (hyperuniform + s) % 1.0 for name, s in zip(names, shifts)}
+    if isinstance(seed, dict):
+        if set(seed) != set(names):
+            raise ValueError(f"seed: expected the keys {list(names)}, got {list(seed)}")
+        return {name: _unit_square(seed[name]) for name in names}
+    return {name: _unit_square(seed) for name in names}

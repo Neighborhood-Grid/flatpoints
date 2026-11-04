@@ -7,13 +7,11 @@
 `Resampler` uses the images of a `Flat` to transport a 2D point set (by default a
 hyperuniform seed) onto the surface: (row, col) -> xyz.
 """
-from pathlib import Path
-
 import numpy as np
 from scipy.ndimage import gaussian_filter, map_coordinates
 
 from .core import layout
-from .utils import axes, fill_empty, split, Corners
+from .utils import axes, fill_empty, split, Corners, _window, _seeds
 
 
 
@@ -108,40 +106,28 @@ class Flat:
         return image
 
 
-SEED = Path(__file__).resolve().parents[2] / "data" / "seed.npy"  # (2**17, 2) hyperuniform
-
-
 class Resampler:
-    """Resample a surface: `n` new points per face, transported from a 2D point set.
+    """Resample a surface: `n` new points per face, evenly spread (hyperuniform).
 
-    1. `Flat(points)`: each face is an (n_grid, n_grid) image, pixel -> xyz.
-    2. A square window of the 2D `seed` (periodic on [0, 1)^2) holding `n` points, rescaled
-       to the face's image: (row, col) in [0, n_grid - 1]^2. Points whose nearest pixel is
-       a padding pixel (outside the surface, see `Flat.corners`) are skipped; the window
-       grows until it holds `n` points on the surface.
-    3. xyz of each point: bilinear interpolation of the image, smoothed by a Gaussian of
-       `sigma` pixels.
-
-    With the default seed, a stealthy hyperuniform point set of 2**17 points (data/seed.npy),
-    the new points are evenly spread over the surface (blue noise), up to the area distortion
-    of the flattening. Any (M, 2) array in [0, 1)^2 can be used instead, e.g. i.i.d. uniform
-    points for comparison.
+    The points of a 2D seed in the unit square are placed on the images of `Flat(points)`
+    and lifted to the surface (row, col -> xyz).
 
     Args:
         points: (N, 3) point cloud sampled on the surface.
         n: number of new points per face.
-        seed: (M, 2) points in [0, 1)^2, or path to a .npy file; default: data/seed.npy.
-        offset: (2,) corner of the window of the first face, in [0, 1)^2. Face f uses
-            offset + f * (0.5, 0.5): the faces get disjoint windows of the seed.
-        sigma: Gaussian smoothing of the images, in pixels (0: none).
+        seed: one of
+            - int (default 42): the hyperuniform seed data/seed.npy, randomly shifted;
+              another integer gives an independent resampling;
+            - (M, 2) points in [0, 1)^2, used for every face;
+            - {"left": (M, 2), "right": (M, 2)}: points for each face
+        sigma: Gaussian smoothing of the images before lifting, in pixels.
         single_face, lateral, up, verbose: passed to `Flat`.
 
     Attributes:
-        flat: the `Flat` of the input points.
+        flat: the `Flat` of `points`.
         points: (n_faces * n, 3) the new points, face by face.
-        faces: (n_faces * n,) face of each new point (0 = left or the only face, 1 = right).
-        pixels: (n_faces * n, 3) float (face, row, col) of each new point on the images.
-        windows: [(offset, side)] the window of the seed used for each face.
+        faces: (n_faces * n,) face of each new point.
+        pixels: (n_faces * n, 3) (face, row, col) of each new point, row and col as floats.
 
     Example:
         sampler = Resampler(points, n=256)
@@ -149,26 +135,23 @@ class Resampler:
         sampler.plot()
     """
 
-    def __init__(self, points, n=256, seed=None, offset=(0.0, 0.0), sigma=0.25,
+    def __init__(self, points, n=256, seed=42, sigma=0.25,
                  single_face=False, lateral="x", up="z", verbose=False):
         self.flat = flat = Flat(points, single_face, lateral, up, verbose)
-        if seed is None or isinstance(seed, (str, Path)):
-            seed = np.load(SEED if seed is None else seed)
-        seed = np.asarray(seed, float) % 1.0
         self.n, self.sigma = n, sigma
+        names = ("main",) if single_face else ("left", "right")
+        seeds = _seeds(seed, names)
 
         image = flat.to_image(flat.points)  # (n_faces, n_grid, n_grid, 3)
         valid = np.ones(image.shape[:3], bool)  # False on the padding pixels
         valid[tuple(flat.corners.pixels.T)] = False
-        points, pixels, self.windows = [], [], []
-        for f in range(flat.n_faces):
-            o = (np.asarray(offset, float) + 0.5 * f) % 1.0
-            rc, side = _window(seed, n, o, valid[f])
+        points, pixels = [], []
+        for f, name in enumerate(names):
+            rc, _ = _window(seeds[name], n, np.zeros(2), valid[f])
             smooth = gaussian_filter(image[f], (sigma, sigma, 0), mode="nearest")
             points.append(np.stack([map_coordinates(smooth[..., c], rc.T, order=1,
                                                     mode="nearest") for c in range(3)], -1))
             pixels.append(np.c_[np.full(n, f), rc])
-            self.windows.append((o, side))
         self.points = np.concatenate(points)
         self.pixels = np.concatenate(pixels)
         self.faces = self.pixels[:, 0].astype(int)
@@ -178,26 +161,3 @@ class Resampler:
         (quads of `flat`). Draws in `ax` if given. See `viz.plot_resampler`."""
         from .viz import plot_resampler
         return plot_resampler(self, ax=ax, point_size=point_size, **kwargs)
-
-
-def _window(seed, n, offset, valid):
-    """The `n` points of `seed` closest to `offset` in the square (Chebyshev, towards +x,
-    +y on the torus) whose nearest pixel is `valid`, as (row, col) on the (m, m) grid
-    `valid`: the square [offset, offset + side)^2 is rescaled to [0, m - 1]^2.
-
-    Returns:
-        rc: (n, 2) row, col; side: side of the window in the seed.
-    """
-    x = (seed - offset) % 1.0
-    order = np.argsort(x.max(1))
-    x, d = x[order], x.max(1)[order]
-    m, k = len(valid), n
-    while True:
-        if k > len(x):
-            raise ValueError(f"the seed is too small for {n} points on this surface")
-        side = (d[k - 1] + d[k]) / 2 if k < len(x) else 1.0
-        rc = x[:k] / side * (m - 1)
-        ok = valid[tuple(np.clip(np.rint(rc).astype(int), 0, m - 1).T)]
-        if ok.sum() >= n:
-            return rc[ok][:n], side
-        k += n - ok.sum()

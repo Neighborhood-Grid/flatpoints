@@ -3,12 +3,6 @@ Plot of a `Resampler`: `plot_resampler` shows the resampled points on the surfac
 
 Two colourings: RGB = normalised x, y, z, and a checkerboard on the grid cells. A good
 flattening gives smooth colours and regular, undistorted squares.
-
-The 3D views are built from layers, drawn together back to front (painter's algorithm):
-- `quad_layer`: the quads between neighbouring cells of a grid (the surface, shaded);
-- `disc_layer`: small discs facing the camera (the points);
-- `render`: sort all the layers by depth and draw them.
-`sampled_grids` and `camera` give the inputs (grids of a Flat, projection).
 """
 import matplotlib.pyplot as plt
 import numpy as np

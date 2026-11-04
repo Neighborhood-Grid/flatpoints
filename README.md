@@ -73,6 +73,8 @@ sampler = Resampler(xyz, n=256)  # n new points per face (calls Flat(xyz))
 new = sampler.points             # (2 * 256, 3) the new points
 flat = sampler.flat              # the Flat of xyz
 sampler.plot()                   # new points on the mesh of the full cloud
+
+other = Resampler(xyz, n=256, seed=1)  # a new resampling, independent from the previous one
 ```
 
 ```bash
