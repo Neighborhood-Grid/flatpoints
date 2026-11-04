@@ -11,8 +11,8 @@ if __name__ == "__main__":
     points = np.random.permutation(points)
     print(points.shape)
 
-    flat = fp.Flat(points, single_face=False, verbose=False)
-
+    closed = model != "everest" #(topology closed objects have two faces)
+    flat = fp.Flat(points, single_face= not closed, verbose=False)
     fig = fp.plot(flat)
     fig.savefig(f"plots/{model}.png")
     plt.show()

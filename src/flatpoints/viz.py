@@ -52,7 +52,7 @@ def plot(flat, squares=8):
     return fig
 
 
-def imshow(xyz, sigma=2):
+def imshow(xyz, sigma=0.5):
     """The xyz grids (n, n, 3) as images: colors "rgb" (normalised x, y, z, smoothed by a
     Gaussian of `sigma` cells) or "checkerboard"."""
     points = xyz.reshape(-1, 3)
