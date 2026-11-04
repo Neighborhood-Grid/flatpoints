@@ -21,7 +21,7 @@ TAU = (JUMP - 1) / np.sqrt(-np.log(ALPHA))  # width of the fade, see `_alpha`
 def plot(flat, squares=8):
     """First column: all the faces in 3D. Then one column per face in (u, v).
     First row coloured by RGB, second row by a checkerboard of `squares` x `squares`."""
-    st = max(1, flat._n // 30)  # downsampling for faster plot
+    st = max(1, flat._n // 100)  # downsampling for faster plot
     s, k = slice(None, None, st), len(flat.faces)
     xyz = {f: flat.points[flat.indexes[f][s, s]] for f in flat.faces}
     uv = {f: flat.isomap[f][s, s] for f in flat.faces}

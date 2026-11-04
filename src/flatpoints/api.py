@@ -44,7 +44,9 @@ class Flat:
         xyz = points[idx]              # (n, n, 3)
     """
 
-    def __init__(self, points, single_face=False, lateral="x", up="z", verbose=False):
+    def __init__(self, points, single_face=False, lateral="x", up="z", verbose=False, max_sample_size = 10_000):
+        if len(points) >= max_sample_size:
+            points = np.random.permutation(np.asarray(points, float))[:max_sample_size]
         self.points = np.asarray(points, float)
         self._lateral, self._up = lateral, up
         self.faces = ("main",) if single_face else ("left", "right")
