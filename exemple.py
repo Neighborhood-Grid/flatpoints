@@ -25,6 +25,7 @@ if __name__ == "__main__":
     # I. ISOMAPS: xyz -> uv
     fig = fp.plot(flat)
     fig.savefig(f"plots/{model}.png")
+    plt.show()
 
     # II. Images: idx -> row, column
     # The point cloud as an image: (n_faces, n, n, 3), n_faces = 2 (left, right) or 1

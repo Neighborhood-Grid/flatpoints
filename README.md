@@ -1,8 +1,11 @@
 # flatpoints
 
-Turn a point cloud sampled on a surface into a square `(n, n)` grid, where neighbouring
-pixels hold points that are close **on the surface**. You can then use 2D tools on it:
-convolutions, SVD, image codecs…
+Turn a 3D point cloud sampled on a surface into something flat:
+- Isomaps: smooth parametrisation of the surface, xyz -> uv 
+- Images: a square `(n, n)` pixel structure for multi indexing,  idx -> (row, column)
+    each pixel holds one point of the cloud, neighbor pixels hold neighbor points.
+
+You can then use 2D tools on the point cloud: convolutions, SVD, image codecs…
 
 ![bunny](plots/bunny.png)
 ![dragon](plots/dragon.png)
