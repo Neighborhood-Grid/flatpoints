@@ -9,9 +9,10 @@ hyperuniform seed) onto the surface: (row, col) -> xyz.
 """
 import numpy as np
 from scipy.ndimage import gaussian_filter, map_coordinates
+from scipy.spatial import cKDTree
 
 from .core import layout
-from .utils import axes, fill_empty, split, Corners, _window, _seeds
+from .utils import axes, fill_empty, split, Corners, _window, _seeds, ON_SURFACE
 
 
 
@@ -110,7 +111,8 @@ class Resampler:
     """Resample a surface: `n` new points per face, evenly spread (hyperuniform).
 
     The points of a 2D seed in the unit square are placed on the images of `Flat(points)`
-    and lifted to the surface (row, col -> xyz).
+    and lifted to the surface (row, col -> xyz). Lifted points that fall off the surface
+    (across a tear of the images) are skipped, and replaced by the next points of the seed.
 
     Args:
         points: (N, 3) point cloud sampled on the surface.
@@ -135,7 +137,7 @@ class Resampler:
         sampler.plot()
     """
 
-    def __init__(self, points, n=256, seed=42, sigma=0.25,
+    def __init__(self, points, n=256, seed=42, sigma=0.0,
                  single_face=False, lateral="x", up="z", verbose=False):
         self.flat = flat = Flat(points, single_face, lateral, up, verbose)
         self.n, self.sigma = n, sigma
@@ -145,19 +147,30 @@ class Resampler:
         image = flat.to_image(flat.points)  # (n_faces, n_grid, n_grid, 3)
         valid = np.ones(image.shape[:3], bool)  # False on the padding pixels
         valid[tuple(flat.corners.pixels.T)] = False
+        tree = cKDTree(flat.points)
+        spacing = tree.query(flat.points, k=7)[0][:, 1:].mean(1)  # local, per input point
+        m = flat.n
         points, pixels = [], []
         for f, name in enumerate(names):
-            rc, _ = _window(seeds[name], n, np.zeros(2), valid[f])
             smooth = gaussian_filter(image[f], (sigma, sigma, 0), mode="nearest")
-            points.append(np.stack([map_coordinates(smooth[..., c], rc.T, order=1,
-                                                    mode="nearest") for c in range(3)], -1))
+            lift = lambda rc: np.stack([map_coordinates(smooth[..., c], rc.T, order=1,
+                                                        mode="nearest") for c in range(3)], -1)
+
+            def keep(rc, f=f, lift=lift):
+                """Not on a padding pixel, and on the surface (not in the air)."""
+                pixel = valid[f][tuple(np.clip(np.rint(rc).astype(int), 0, m - 1).T)]
+                d, i = tree.query(lift(rc))
+                return pixel & (d <= ON_SURFACE * spacing[i])
+
+            rc = _window(seeds[name], n, m, keep)
+            points.append(lift(rc))
             pixels.append(np.c_[np.full(n, f), rc])
         self.points = np.concatenate(points)
         self.pixels = np.concatenate(pixels)
         self.faces = self.pixels[:, 0].astype(int)
 
     def plot(self, ax=None, point_size=1.0, **kwargs):
-        """3D view, RGB colours: the new points (discs) on the mesh of the full point cloud
-        (quads of `flat`). Draws in `ax` if given. See `viz.plot_resampler`."""
+        """Before (input cloud, left) / after (new points on its mesh, right), in 3D.
+        With `ax`, only the after view, drawn in `ax`. See `viz.plot_resampler`."""
         from .viz import plot_resampler
         return plot_resampler(self, ax=ax, point_size=point_size, **kwargs)

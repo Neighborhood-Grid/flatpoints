@@ -46,15 +46,23 @@ def plot(flat, squares=8, point_size=1.0):
 
 
 def plot_resampler(sampler, ax=None, point_size=1.0, light=0.45, radius=None):
-    """3D view of a `Resampler`, RGB colours: the surface is the mesh of the full point
-    cloud (quads of `sampler.flat`, washed towards white by `light`), the points are the
-    resampled ones (discs). `radius` of the discs: default from the mean area per point,
-    so that two resamplers with as many points get the same discs. Returns the figure."""
+    """Before / after, in 3D. Left: the input point cloud (black dots). Right: the
+    resampled points (discs, RGB colours) on the mesh of the input cloud (quads of
+    `sampler.flat`, washed towards white by `light`). With `ax`, only the right view,
+    drawn in `ax`. `radius` of the discs: default from the mean area per point, so that
+    two resamplers with as many points get the same discs. Returns the figure."""
     flat, points = sampler.flat, sampler.points
-    if ax is None:
-        ax = plt.figure(figsize=(7, 7), layout="constrained").add_subplot()
-    st = max(1, flat.n // 110)
     proj = camera(flat.lateral, flat.up)
+    if ax is None:
+        fig, (before, ax) = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True,
+                                         layout="constrained")
+        p = flat.points @ proj.T
+        before.scatter(p[:, 0], p[:, 1], s=1, c="k", linewidths=0)
+        before.set_aspect("equal")
+        before.set_axis_off()
+        before.set_title(f"original ({len(p)} points)")
+        ax.set_title(f"resampled ({len(points)} points)")
+    st = max(1, flat.n // 110)
     if radius is None:
         radius = 0.19 * point_size * np.sqrt(surface_area(flat.points) / len(points))
     layers = []

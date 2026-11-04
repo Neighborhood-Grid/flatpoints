@@ -159,27 +159,36 @@ class Corners(NamedTuple):
 
 SEED = Path(__file__).resolve().parents[2] / "data" / "seed.npy"  # (2**17, 2) hyperuniform
 
-def _window(seed, n, offset, valid):
-    """The `n` points of `seed` closest to `offset` in the square (Chebyshev, towards +x,
-    +y on the torus) whose nearest pixel is `valid`, as (row, col) on the (m, m) grid
-    `valid`: the square [offset, offset + side)^2 is rescaled to [0, m - 1]^2.
+# A new point is on the surface if it is closer to the input cloud than ON_SURFACE times
+# the local spacing of the cloud (mean distance of the nearest input point to its 6
+# neighbours). Bilinear interpolation across a tear of the images (two pixels side by side
+# from far apart parts of the surface) gives points in the air, far from the cloud.
+ON_SURFACE = 1.5
+
+
+def _window(seed, n, m, keep):
+    """The `n` points of `seed` closest to the origin (square windows [0, side)^2) that
+    `keep`, as (row, col) on an m x m grid: [0, side)^2 is rescaled to [0, m - 1]^2.
+
+    Args:
+        keep: (k, 2) row, col -> (k,) True for the points to keep.
 
     Returns:
-        rc: (n, 2) row, col; side: side of the window in the seed.
+        (n, 2) row, col.
     """
-    x = (seed - offset) % 1.0
-    order = np.argsort(x.max(1))
-    x, d = x[order], x.max(1)[order]
-    m, k = len(valid), n
+    order = np.argsort(seed.max(1))
+    x, d = seed[order], seed.max(1)[order]
+    k = n
     while True:
         if k > len(x):
             raise ValueError(f"the seed is too small for {n} points on this surface")
         side = (d[k - 1] + d[k]) / 2 if k < len(x) else 1.0
         rc = x[:k] / side * (m - 1)
-        ok = valid[tuple(np.clip(np.rint(rc).astype(int), 0, m - 1).T)]
+        ok = keep(rc)
         if ok.sum() >= n:
-            return rc[ok][:n], side
+            return rc[ok][:n]
         k += n - ok.sum()
+
 
 def _seeds(seed, names):
     """{face name: (M, 2) points in [0, 1)^2} from the `seed` argument of `Resampler`."""
@@ -192,3 +201,14 @@ def _seeds(seed, names):
             raise ValueError(f"seed: expected the keys {list(names)}, got {list(seed)}")
         return {name: _unit_square(seed[name]) for name in names}
     return {name: _unit_square(seed) for name in names}
+
+def _unit_square(cloud):
+    """`cloud` as an (M, 2) float array, checked to lie in [0, 1)^2."""
+    try:
+        cloud = np.asarray(cloud, float)
+    except (TypeError, ValueError):
+        cloud = None
+    if cloud is None or cloud.ndim != 2 or cloud.shape[1] != 2 or not (
+            (cloud >= 0).all() and (cloud < 1).all()):
+        raise ValueError("seed: an int, an (M, 2) array in [0, 1)^2, or a dict of them")
+    return cloud

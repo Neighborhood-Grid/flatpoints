@@ -82,7 +82,7 @@ python exemple_sampler.py --bunny # plots/bunny_resampled.png
 python exemple_sampler.py --all   # plots/resampled.png 
 ```
 
-![hyperuniform resampling](plots/bunny_sampler.png)
+![hyperuniform resampling: before, after](plots/bunny_resampled.png)
 
 ## Licence
 
