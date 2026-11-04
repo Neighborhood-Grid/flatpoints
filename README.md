@@ -4,7 +4,7 @@ Turn a point cloud sampled on a surface into square `(n, n)` images, where neigh
 pixels hold points that are close **on the surface**. You can then use 2D tools on it:
 convolutions, SVD, image codecs…
 
-![horse](plots/horse.png)
+![horse](plots/bunny.png)
 
 ## Install
 
