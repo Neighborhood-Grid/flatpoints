@@ -67,7 +67,8 @@ def plot_resampler(sampler, ax=None, point_size=1.0, light=0.45, radius=None):
         radius = 0.19 * point_size * np.sqrt(surface_area(flat.points) / len(points))
     layers = []
     for f, g in enumerate(sampled_grids(flat, st).values()):
-        quads, shade = quad_layer(g["xyz"] @ proj.T, g["rgb"], g["alpha"], light)
+        # opaque mesh (hides the points behind it), see-through only across the seams
+        quads, shade = quad_layer(g["xyz"] @ proj.T, g["rgb"], g["alpha"] / ALPHA_MAX, light)
         layers.append(quads)
         mine = points[sampler.faces == f]
         if len(mine):  # shade of a point: the one of the nearest quad
