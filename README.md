@@ -67,8 +67,7 @@ can only pick points of the input cloud. Flatpoints provides the missing paramet
 Because it maps the 2D unit square to arbitrary surface through the `image` paradygm, flatpoints`
 just needs to sample points on the 2D unit square and then transport them to the surface
 by bilinear interpolation, (row, col) -> xyz.
-By default, the 2D points are a window of a hyperuniform seed (blue noise)
-([data/seed.npy](data/README.md#hyperuniform-seed)), so the new points are evenly spread
+By default, the 2D points are a window of a hyperuniform seed (blue noise), so the new points are evenly spread
 over the surface.
 
 ```python
@@ -79,6 +78,8 @@ sampler.plot()                   # new points on the mesh of the full cloud
 
 other = Resampler(xyz, n=256, seed=1)  # a new resampling, independent from the previous one
 ```
+
+See [exemple_sampler.py](exemple_sampler.py).
 
 ```bash
 python exemple_sampler.py --bunny # plots/bunny_resampled.png 
