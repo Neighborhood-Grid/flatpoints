@@ -58,15 +58,18 @@ to flatten left and right hemispheres independantly
 
 See [exemple_flat.py](exemple_flat.py).
 
-## Applications: Resampling
+## An application exemple: Resampling from a point cloud
 
-Resampling surfaces is an exemple of application of flatpoints.
-
-`Resampler` uses the images of a `Flat` to draw new points on the surface: a 2D point set
-is placed on each image, (row, col) -> xyz by bilinear interpolation (of slightly smoothed
-images). By default, the 2D points are a window of a hyperuniform seed
-([data/seed.npy](data/README.md#hyperuniform-seed)): the new points are
-evenly spread over the surface (blue noise).
+While sampling from a mesh is relatively easy (by sampling uniformly on each of its
+triangles), it is difficult to resample from a point cloud: there is no connectivity, no
+parametrisation, and the usual subsampling methods (voxel grids, farthest point sampling)
+can only pick points of the input cloud. Flatpoints provides the missing parametrisation:
+Because it maps the 2D unit square to arbitrary surface through the `image` paradygm, flatpoints`
+just needs to sample points on the 2D unit square and then transport them to the surface
+by bilinear interpolation, (row, col) -> xyz.
+By default, the 2D points are a window of a hyperuniform seed (blue noise)
+([data/seed.npy](data/README.md#hyperuniform-seed)), so the new points are evenly spread
+over the surface.
 
 ```python
 sampler = Resampler(xyz, n=256)  # n new points per face (calls Flat(xyz))
