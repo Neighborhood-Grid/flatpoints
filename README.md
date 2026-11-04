@@ -5,7 +5,6 @@ pixels hold points that are close **on the surface**. You can then use 2D tools 
 convolutions, SVD, image codecs…
 
 ![bunny](plots/bunny.png)
-![airplane](plots/airplane.png)
 ![dragon](plots/dragon.png)
 
 ## Install
