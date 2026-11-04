@@ -46,10 +46,11 @@ class Flat:
 
     def __init__(self, points, single_face=False, lateral="x", up="z", verbose=False):
         self.points = np.asarray(points, float)
-        self._lateral, self._up = lateral, up
         self.faces = ("main",) if single_face else ("left", "right")
         self.indexes, self.isomap = {}, {}
-
+        if up == lateral:
+            up = "y" if lateral == "z" else "z"
+        self._lateral, self._up = lateral, up
         face_of, ab = split(self.points, single_face, *axes(lateral, up))
         self._n = int(np.ceil(np.sqrt(np.bincount(face_of).max())))
         for f, name in enumerate(self.faces):

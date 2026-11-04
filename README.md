@@ -32,7 +32,9 @@ fp.imshow(xyz) #rgb chanels
 Use `fp.Flat(points, single_face=True)` for an open surface.
 See [exemple.py](exemple.py).
 
-## Data
 
-`data/` holds clouds sampled from classic 3D test models. They are **not** covered by the
+## Licence:
+
+-code: MIT
+-data: data/ holds clouds sampled from classic 3D test models. They are **not** covered by the
 code's license: see [data/README.md](data/README.md).

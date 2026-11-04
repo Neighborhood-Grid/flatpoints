@@ -58,10 +58,8 @@ def grid_sort(X, n, verbose=False):
         (n*n,) for each cell (row-major order), the index of its point in X, or -1 if empty.
     """
     N = len(X)
-    # gridpoints works in 3D with exactly one point per cell: add z = 0, and fill the
-    # missing points with inf so they end up in empty cells.
-    X = gridpoints.pad(np.c_[X, np.zeros(N)], n * n, value="inf")
-    order = np.asarray(gridpoints.argsort(X, (n, n, 1), verbose=int(verbose)))
+    X = gridpoints.pad(np.c_[X], n * n, value="inf")
+    order = np.asarray(gridpoints.argsort(X, (n, n), verbose=int(verbose), n_iter = 100))
     return np.where(order < N, order, -1)
 
 
