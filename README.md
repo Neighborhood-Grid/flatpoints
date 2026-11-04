@@ -2,8 +2,8 @@
 
 Turn a 3D point cloud sampled on a surface into something flat:
 - Isomaps: smooth parametrisation of the surface, xyz -> uv 
-- Images: a square `(n, n)` pixel structure for multi indexing,  idx -> (row, column)
-    each pixel holds one point of the cloud, neighbor pixels hold neighbor points.
+- Images: a square `(n, n)` pixel structure for multi indexing,  idx -> (row, column).
+    Each pixel holds one point of the cloud, neighbor pixels hold neighbor points.
 
 You can then use 2D tools on the point cloud: convolutions, SVD, image codecs…
 
