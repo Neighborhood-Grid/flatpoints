@@ -61,8 +61,8 @@ See [exemple_flat.py](exemple_flat.py).
 ## An application exemple: Resampling from a point cloud
 
 While sampling from a mesh is relatively easy (by sampling uniformly on each of its
-triangles), it is difficult to resample from a point cloud: the usual subsampling methods 
-(voxel grids, farthest point sampling) can only pick points of the input cloud. 
+triangles), it is difficult to resample from a point cloud: the usual subsampling method
+(farthest point sampling) can only pick points of the input cloud. 
 Flatpoints provides the missing parametrisation which allow to work on the latent surface directly:
 Because it maps the 2D unit square to the point cloud surface through the `to_image` paradygm, one
 just needs to sample points on the 2D unit square and then transport them to the surface
