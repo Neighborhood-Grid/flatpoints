@@ -35,6 +35,6 @@ See [exemple.py](exemple.py).
 
 ## Licence:
 
--code: MIT
+-code: MIT \
 -data: data/ holds clouds sampled from classic 3D test models. They are **not** covered by the
 code's license: see [data/README.md](data/README.md).
