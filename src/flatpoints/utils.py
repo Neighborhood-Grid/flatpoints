@@ -4,6 +4,7 @@ Everything here is plumbing around the algorithm of `core`: no geodesics, no fla
 """
 import gridpoints
 import numpy as np
+from typing import NamedTuple
 
 # Landmark positions (row, col), as fractions of the grid side: 4 corners, 4 edge middles,
 # centre, and the centres of the 4 quarter squares (13 in total).
@@ -16,7 +17,6 @@ ROTATION_SAMPLES = 50
 
 # Number of 3D nearest neighbours used to smooth (u, v) (smoothing=True).
 KNN = 16
-
 
 def axes(lateral, up):
     """Indices (0, 1 or 2) of the lateral and up axes; up=None picks the default (the
@@ -145,3 +145,8 @@ def orient(uv, ab, n_samples=ROTATION_SAMPLES):
 def _unit(X):
     """Each column of X scaled to [0, 1]."""
     return (X - X.min(0)) / np.maximum(np.ptp(X, 0), 1e-12)
+
+class Corners(NamedTuple):
+    """Padding of the grids: copy points[idxs[k]] into pixel pixels[k]."""
+    idxs: np.ndarray    # (Npadding,) index in the point cloud of the point to copy
+    pixels: np.ndarray  # (Npadding, 3) (face, row, col) where to copy it

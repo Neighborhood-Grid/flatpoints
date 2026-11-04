@@ -2,11 +2,6 @@
 
 Two colourings: RGB = normalised x, y, z, and a checkerboard on the grid cells. A good
 flattening gives smooth colours and regular, undistorted squares.
-
-Each cell is drawn as a point, over the quads between neighbouring cells in light colours.
-The 3D view is projected and sorted back to front (painter's algorithm, points and quads
-together), with a simple shading. A quad fades out the more likely the grid jumps there:
-the longer its longest side in (u, v) compared with the sides around it. Opaque for regular sides, ALPHA at JUMP times longer, ~0 beyond.
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,28 +18,31 @@ LIGHT = 1.0  # strength of the background quads in (u, v): 0 = white, 1 = full c
 def plot(flat, squares=8):
     """First column: all the faces in 3D. Then one column per face in (u, v).
     First row coloured by RGB, second row by a checkerboard of `squares` x `squares`."""
-    st = max(1, flat._n // 110)  # downsampling for faster plot
-    s, k = slice(None, None, st), len(flat.faces)
-    xyz = {f: flat.points[flat.indexes[f][s, s]] for f in flat.faces}
-    uv = {f: flat.isomap[f][s, s] for f in flat.faces}
-    rgb = {f: c[s, s] for f, c in _rgb(flat).items()}
+    grids = _grids(flat)  # {face: (n, n) index of each pixel's point}
+    st = max(1, flat.n // 110)  # downsampling for faster plot
+    s, k = slice(None, None, st), len(grids)
+    lo, hi = flat.points.min(0), flat.points.max(0)
+    norm = (flat.points - lo) / np.where(hi > lo, hi - lo, 1)  # x, y, z in [0, 1]
+    xyz = {f: flat.points[g[s, s]] for f, g in grids.items()}
+    uv = {f: flat.uv[g[s, s]] for f, g in grids.items()}
+    rgb = {f: norm[g[s, s]] for f, g in grids.items()}
     m = len(next(iter(uv.values())))  # side of the drawn grids
     # Opacity on the full grid: a drawn quad takes the lowest of the quads it covers
     alpha = {f: np.minimum.reduce([a[i::st, j::st][:m - 1, :m - 1] for i in range(st)
                                    for j in range(st)])
-             for f, a in ((f, _alpha(flat.isomap[f])) for f in flat.faces)}
-    proj = _camera(flat._lateral, flat._up)
+             for f, a in ((f, _alpha(flat.uv[g])) for f, g in grids.items())}
+    proj = _camera(flat.lateral, flat.up)
     fig = plt.figure(figsize=(4 + 3 * k, 6.5), layout="constrained")
     grid = fig.add_gridspec(2, 1 + k, width_ratios=[1.5] + [1] * k)
     size = (300 / m) ** 2  # marker area (pt^2): about half a grid step, the quads show between
     for row, name in enumerate(("RGB", "checkerboard")):
-        col = {f: _checker(m, squares) if row else rgb[f] for f in flat.faces}  # per cell
+        col = {f: _checker(m, squares) if row else rgb[f] for f in grids}  # per cell
         ax = fig.add_subplot(grid[row, 0], title=f"xyz, {name}")
-        _draw3d(ax, [(xyz[f] @ proj.T, col[f], alpha[f]) for f in flat.faces])
-        for c, f in enumerate(flat.faces, start=1):
+        _draw3d(ax, [(xyz[f] @ proj.T, col[f], alpha[f]) for f in grids])
+        for c, f in enumerate(grids, start=1):
             ax = fig.add_subplot(grid[row, c], aspect="equal", xlim=(0, 1), ylim=(0, 1),
                                  xticks=[0, .5, 1], yticks=[0, .5, 1], xlabel="u", ylabel="v",
-                                 title=f"{f}: uv, {name}")
+                                 title=f"{f + ': ' if f else ''}uv, {name}")
             light = 1 - LIGHT * (1 - _quads(col[f]).mean(2))  # quads, washed towards white
             _add(ax, _quads(uv[f]).reshape(-1, 4, 2), _rgba(light, alpha[f]).reshape(-1, 4))
             ax.scatter(*uv[f].reshape(-1, 2).T, c=col[f].reshape(-1, 3), s=size,
@@ -53,8 +51,8 @@ def plot(flat, squares=8):
 
 
 def imshow(xyz, sigma=0.5):
-    """The xyz grids (n, n, 3) as images: colors "rgb" (normalised x, y, z, smoothed by a
-    Gaussian of `sigma` cells) or "checkerboard"."""
+    """An xyz grid (n, n, 3), e.g. `flat.to_image(points)[0]`, as an RGB image: normalised
+    x, y, z, smoothed by a Gaussian of `sigma` pixels."""
     points = xyz.reshape(-1, 3)
     fig, ax = plt.subplots()
     lo, hi = points.min(0)[None, None], points.max(0)[None, None]
@@ -63,11 +61,11 @@ def imshow(xyz, sigma=0.5):
     return fig
 
 
-def _rgb(flat):
-    """{face: (n, n, 3)} normalised x, y, z, on a common scale for all the faces."""
-    lo, hi = flat.points.min(0), flat.points.max(0)
-    return {f: (flat.points[flat.indexes[f]] - lo) / np.where(hi > lo, hi - lo, 1)
-            for f in flat.faces}
+def _grids(flat):
+    """{face: (n, n) index of each pixel's point}, empty pixels filled from the corners;
+    faces "left", "right", or "" if single_face."""
+    idx = flat.to_image(np.arange(len(flat.points)))
+    return {"": idx[0]} if flat.single_face else {"left": idx[0], "right": idx[1]}
 
 
 def _checker(n, squares):

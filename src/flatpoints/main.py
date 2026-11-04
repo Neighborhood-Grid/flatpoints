@@ -1,63 +1,103 @@
 """User-facing class of flatpoints: `Flat`.
 
-`Flat` takes points sampled on a surface and assigns each of them to a cell of a square
-grid, so that neighbouring cells hold points that are close *on the surface*.
-Grid-based tools (convolutions, images, ...) can then be applied to the cloud.
-
-A closed surface (e.g. an animal, a sphere) cannot be flattened in one piece: it is cut
-in two faces, "left" and "right", by a plane perpendicular to a chosen `lateral` axis
-(x, y or z), each face laid out on its own grid (see `core.layout`). An open surface
-(e.g. a terrain) fits on a single grid, the face "main" (single_face=True).
+`Flat` takes points sampled on a surface and build 2 related "flattening" operations:
+- isomaps: 2D parametrisation of the 3D surface, e.g. smooth flattening xyz -> uv
+- images: multi index assignement of the points, raw linear index to pixel layout, e.g. idx -> (row, column)
 """
+
 import numpy as np
 
 from .core import layout
-from .utils import axes, fill_empty, split
+from .utils import axes, fill_empty, split, Corners
+
 
 
 class Flat:
-    """A point cloud arranged on square grids, neighbours on the grid being neighbours
-    on the surface.
+    """Map a 3D point cloud onto one or two 2D grids.
+
+    Two mappings are computed:
+    - `uv`: continuous 2D coordinates for each point, defining its surface
+      parametrisation.
+    - `pixels`: discrete (face, row, col) coordinates, assigning each point
+      to a unique grid cell.
 
     Args:
-        points: (N, 3) array of xyz coordinates.
-        single_face: False (default) for a closed surface, cut in two faces "left" and
-            "right". True for an open surface: one face "main".
-        lateral: "x", "y" or "z", the axis across which the surface is cut (default x).
-        up: "x", "y" or "z", the vertical axis (default z); v follows it.
-        verbose: print progress.
+        points: (N, 3) array of 3D coordinates.
+        single_face: If True, use a single grid. Otherwise, split the surface
+            into left and right faces.
+        lateral: Axis along which to split the surface ("x", "y" or "z").
+        up: Vertical axis defining the v direction ("x", "y" or "z").
+        verbose: Print progress information.
 
     Attributes:
-        faces: names of the faces, ("left", "right") or ("main",).
-        n: side of the grids.
-        indexes: {face: (n, n) int array}, the index in `points` of each cell's point.
-        isomap: {face: (n, n, 2) float array}, the flat (u, v) coordinates of each
-            cell's point, in [0, 1].
+        n: Side length of each square grid.
+        n_faces: Number of grids (1 or 2).
+        uv: (N, 2) continuous coordinates in [0, 1].
+        pixels: (N, 3) integer coordinates (face, row, col) of each point.
+        faces: Dictionary mapping face names to point indices, or None if
+            single_face=True.
+        corners: Padding information for empty grid cells. Contains:
+            - idxs: Point indices to copy.
+            - pixels: Destination (face, row, col) coordinates.
 
-        The grids read like images: u increases from left to right, v from bottom to top
-        (row 0 is the top).
-
-    Example:
+     Example: flatten raw (N, 3) point cloud
         flat = Flat(points)
-        idx = flat.indexes["left"]     # (n, n)
-        uv = flat.isomap["left"]       # (n, n, 2)
-        xyz = flat.points[idx]         # (n, n, 3), not points[idx]: see max_sample_size
+
+        # Continuous surface coordinates
+        uv = flat.uv  # (N, 2)
+
+        # Discrete grid coordinates
+        face, row, col = flat.pixels[42]
+
+        # Convert any per-point data into images
+        image = flat.to_image(data)  # (2, n, n, ...)
     """
 
     def __init__(self, points, single_face=False, lateral="x", up="z", verbose=False):
         self.points = np.asarray(points, float)
-        self.faces = ("main",) if single_face else ("left", "right")
-        self.indexes, self.isomap = {}, {}
         if up == lateral:
             up = "y" if lateral == "z" else "z"
-        self._lateral, self._up = lateral, up
+        self.lateral, self.up, self.single_face = lateral, up, single_face
+
         face_of, ab = split(self.points, single_face, *axes(lateral, up))
-        self._n = int(np.ceil(np.sqrt(np.bincount(face_of).max())))
-        for f, name in enumerate(self.faces):
-            idx = np.flatnonzero(face_of == f)
+        names = ("main",) if single_face else ("left", "right")
+        self.n_faces = len(names)
+        self.n = n = int(np.ceil(np.sqrt(np.bincount(face_of).max())))
+
+        N = len(self.points)
+        self.uv = np.zeros((N, 2))
+        self.pixels = np.zeros((N, 3), int)
+        self.faces = None if single_face else {}
+        corner_idxs, corner_pixels = [], []
+
+        for f, name in enumerate(names):
+            idx = np.flatnonzero(face_of == f)  # points of this face
             if verbose:
-                print(f"face {name}: {len(idx)} points on {self._n} x {self._n}")
-            cells, uv = layout(self.points[idx], ab[idx], self._n, verbose)
-            cells = fill_empty(cells)  # indices into idx; empty -> corner landmark
-            self.indexes[name] = idx[cells]
-            self.isomap[name] = uv[cells]
+                print(f"face {name}: {len(idx)} points on {n} x {n}")
+            cells, uv = layout(self.points[idx], ab[idx], n, verbose)  # (n, n), -1 = empty
+            self.uv[idx] = uv
+            if not single_face:
+                self.faces[name] = idx
+
+            rows, cols = np.nonzero(cells >= 0)
+            self.pixels[idx[cells[rows, cols]]] = np.c_[np.full(len(rows), f), rows, cols]
+
+            rows, cols = np.nonzero(cells < 0)
+            corner_idxs.append(idx[fill_empty(cells)[rows, cols]])
+            corner_pixels.append(np.c_[np.full(len(rows), f), rows, cols])
+
+        self.corners = Corners(np.concatenate(corner_idxs), np.concatenate(corner_pixels))
+
+    def to_image(self, values):
+        """Place per-point `values` (N, ...) on the grids, empty pixels filled from the
+        corners: (n_faces, n, n, ...), image[0] being the left face (or the only one)
+        and image[1] the right one.
+
+        E.g. `to_image(points)` is the cloud as an xyz image, `to_image(np.arange(N))` the
+        index of the point in each pixel.
+        """
+        values = np.asarray(values)
+        image = np.empty((self.n_faces, self.n, self.n) + values.shape[1:], values.dtype)
+        image[tuple(self.pixels.T)] = values
+        image[tuple(self.corners.pixels.T)] = values[self.corners.idxs]
+        return image
