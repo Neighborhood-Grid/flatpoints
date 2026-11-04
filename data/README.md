@@ -7,18 +7,6 @@ surface of a classic 3D test mesh. `bunny_points.npy` is float64, the others flo
 points = np.load("data/dragon_points.npy")
 ```
 
-**Orientation.** All clouds share one convention: **z up**, **x left-right** (the object's
-own left-right axis), y front-back. The defaults of `Flat` (`lateral="x"`,
-z up) therefore show every model upright. The original models were rotated (proper rotations
-only, no mirroring) to follow this convention; the clouds in their original orientation are
-kept in `original/`:
-
-| Models | Original orientation | Rotation (new x, y, z) |
-|---|---|---|
-| airplane, horse | x left-right, z up | unchanged |
-| armadillo, max_planck, spot | x left-right, y up | (x, -z, y) |
-| bunny, cow, dragon, xyzrgb_dragon | z left-right, y up | (z, x, y) |
-
 **These clouds are derived from third-party models and are not covered by the license of the
 code.** Each one keeps the terms of its original model, listed below. Please credit the sources
 if you use them.
@@ -46,3 +34,13 @@ permission.
 (**) As listed in the [Suggestive Contour Gallery](https://gfx.cs.princeton.edu/proj/sugcon/models/)
 (Princeton): believed to be redistributable for research and non-commercial use, but remain
 under copyright by their creators.
+
+# Hyperuniform seed
+
+`seed.npy` is a `(131072, 2)` float32 array: a stealthy hyperuniform point cloud of N = 2¹⁷
+points on the unit square [0, 1)², periodic (it tiles the plane). It is the D = 2, l2 point
+cloud `N17_D2.h5` of the
+[Hyperuniform samples database](https://github.com/For-a-few-DPPs-more/hyperuniform-samplers)
+(release `dataset-v5.0.0`, [doi:10.5281/zenodo.23244509](https://doi.org/10.5281/zenodo.23244509)),
+by R. Bardenet, R. Lachièze-Rey and A. de Cacqueray, MIT licence. `Resampler` cuts square
+windows in it.

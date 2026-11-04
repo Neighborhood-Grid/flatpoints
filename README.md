@@ -22,7 +22,7 @@ Take a raw 3D point cloud (N, 3), and flatten it to 2D. \
 Available: bunny, dragon, airplane, cow, everest...
 
 ```bash
-python exemple.py --bunny
+python exemple_flat.py --bunny
 ```
 
 ## Usage
@@ -56,7 +56,31 @@ to flatten it on a single map.
 Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
 to flatten left and right hemispheres independantly
 
-See [exemple.py](exemple.py).
+See [exemple_flat.py](exemple_flat.py).
+
+## Applications: Resampling
+
+Resampling surfaces is an exemple of application of flatpoints.
+
+`Resampler` uses the images of a `Flat` to draw new points on the surface: a 2D point set
+is placed on each image, (row, col) -> xyz by bilinear interpolation (of slightly smoothed
+images). By default, the 2D points are a window of a hyperuniform seed
+([data/seed.npy](data/README.md#hyperuniform-seed)): the new points are
+evenly spread over the surface (blue noise).
+
+```python
+sampler = Resampler(xyz, n=256)  # n new points per face (calls Flat(xyz))
+new = sampler.points             # (2 * 256, 3) the new points
+flat = sampler.flat              # the Flat of xyz
+sampler.plot()                   # new points on the mesh of the full cloud
+```
+
+```bash
+python exemple_sampler.py --bunny # plots/bunny_resampled.png 
+python exemple_sampler.py --all   # plots/resampled.png 
+```
+
+![hyperuniform resampling](plots/bunny_sampler.png)
 
 ## Licence
 
