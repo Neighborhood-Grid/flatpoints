@@ -64,7 +64,7 @@ While sampling from a mesh is relatively easy (by sampling uniformly on each of 
 triangles), it is difficult to resample from a point cloud: there is no connectivity, no
 parametrisation, and the usual subsampling methods (voxel grids, farthest point sampling)
 can only pick points of the input cloud. Flatpoints provides the missing parametrisation:
-Because it maps the 2D unit square to arbitrary surface through the `image` paradygm, flatpoints`
+Because it maps the 2D unit square to arbitrary surface through the `to_image` paradygm, flatpoints`
 just needs to sample points on the 2D unit square and then transport them to the surface
 by bilinear interpolation, (row, col) -> xyz.
 By default, the 2D points are a window of a hyperuniform seed (blue noise), so the new points are evenly spread
