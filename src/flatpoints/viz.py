@@ -23,7 +23,7 @@ LIGHT = 1.0  # strength of the background quads in (u, v): 0 = white, 1 = full c
 def plot(flat, squares=8):
     """First column: all the faces in 3D. Then one column per face in (u, v).
     First row coloured by RGB, second row by a checkerboard of `squares` x `squares`."""
-    st = max(1, flat._n // 100)  # downsampling for faster plot
+    st = max(1, flat._n // 110)  # downsampling for faster plot
     s, k = slice(None, None, st), len(flat.faces)
     xyz = {f: flat.points[flat.indexes[f][s, s]] for f in flat.faces}
     uv = {f: flat.isomap[f][s, s] for f in flat.faces}
@@ -52,16 +52,14 @@ def plot(flat, squares=8):
     return fig
 
 
-def imshow(flat, colors="rgb", squares=4, sigma=2):
-    """The grids as images, one per face: colors "rgb" (normalised x, y, z, smoothed by a
+def imshow(xyz, sigma=2):
+    """The xyz grids (n, n, 3) as images: colors "rgb" (normalised x, y, z, smoothed by a
     Gaussian of `sigma` cells) or "checkerboard"."""
-    fig, axes = plt.subplots(1, len(flat.faces), figsize=(4 * len(flat.faces), 4.4),
-                             squeeze=False, layout="constrained")
-    for ax, (f, im) in zip(axes[0], _rgb(flat).items()):
-        ax.imshow(gaussian_filter(im, (sigma, sigma, 0)) if colors == "rgb"
-                  else _checker(flat._n, squares), interpolation="nearest")
-        ax.set_title(f"{f}: grid, {colors}")
-        ax.set_axis_off()
+    points = xyz.reshape(-1, 3)
+    fig, ax = plt.subplots()
+    lo, hi = points.min(0)[None, None], points.max(0)[None, None]
+    ax.imshow(gaussian_filter((xyz - lo)/(hi - lo), (sigma, sigma, 0)), interpolation="nearest")
+    ax.set_axis_off()
     return fig
 
 

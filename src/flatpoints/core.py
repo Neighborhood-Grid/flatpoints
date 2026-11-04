@@ -19,10 +19,10 @@ from .utils import grid_sort, landmarks, orient
 
 # Grid graph used for geodesics: each cell is linked to the cells at most RADIUS rows and
 # columns away.
-RADIUS = 3
+RADIUS = 4
 # Penalty on long edges (relative to the typical edge length), so that shortest paths
 # follow the surface instead of jumping across gaps between non-adjacent parts.
-EPS = 0.3
+EPS = 0.1
 
 
 def layout(P, ab, n, verbose=False, rotation=True):
@@ -99,13 +99,13 @@ def geodesics(grid, real, sources, radius=RADIUS, eps=EPS):
     graph = lambda w: coo_matrix((w, (i, j)), shape=(n * n, n * n)).tocsr()  # noqa: E731
 
     # Shortest paths for the penalised cost x + eps * x^2 / h (long edges cost more)...
-    cost, pred = dijkstra(graph(x + eps * x**2 / h), directed=False, indices=sources,
+    cost, pred = dijkstra(graph(x*(1 + eps * x / h)), directed=False, indices=sources,
                           return_predecessors=True)
 
     # ...but measured with their true length, the sum of x along each path. Each cell
     # starts with the length of the edge to its predecessor; pointer doubling then adds
     # up the edges back to the source in log2(n*n) steps.
-    X = graph(x)
+    X = graph(x*(1 + eps * x / h))
     X = X + X.T
     rows = np.arange(len(sources))[:, None]
     up = np.where(pred >= 0, pred, np.arange(n * n))  # source/unreached: points to itself
