@@ -1,8 +1,9 @@
 # flatpoints
 
-Turn a 3D point cloud sampled on a latent (unknown) surface into something flat:
+Turn a 3D point cloud sampled on a latent unknown surface into something flat:
 
 ![bunny](plots/bunny.webp)
+[▶️ replay](plots/bunny.webp)
 
 flatpoints take raw point clouds and compute two kinds of flattening: 
 - **UV**: 2D coordinates of the points, xyz -> uv: `uv_geodesic_shortcut` (close to the
