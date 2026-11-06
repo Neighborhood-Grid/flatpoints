@@ -48,11 +48,11 @@ flat = fp.Flat(xyz) # Apply the flattening processing of the surface
 #I. Pixels and Images (learned multi index of the points: idx -> row, column)
 i = 42 #point with index 42
 face, row, col = flat.pixels[i] # face = 0 or 1 for left and right hemispheres (see the Cut section)
-image = flat.to_image(data)    # full image based on the pixels,  (N, *C) to  (1, n, n, *C) / (2, n, n, *C) 
+image = flat.to_image(data)    # full pixel image,  (N, *C) to  (1, n, n, *C) or (2, n, n, *C) 
 
 #II. UV (2D embeding of the points on the surface, xyz -> uv):
 uv = flat.uv_geodesic_shortcut #(N, 2) better visual aspects
-uv = flat.uv_conformal         #(N, 2) angle preserving, no overlaps (if the topology allow it)
+uv = flat.uv_conformal         #(N, 2) angle preserving, no overlaps
 fig = fp.plot(flat)                  # 3D and uv_geodesic_shortcut
 fig = fp.plot(flat, uv="conformal")  # 3D and uv_conformal
 
@@ -66,7 +66,10 @@ chart = flat.charts[0]                         # left face: vertices (indices in
 ### Cut
 
 To map the surface properly to a square, flatpoints need to cut it first in two hemispheres \
-if needed. This will remove some (not all) topology related issues.
+if needed. The hemispheric cut will remove some (not all) topological closedness. Residual  \
+closedness (e.g. for a torus, which cannot be opened by a single cut) will also be automatically
+cut by shearing the surface further on each hemisphere.
+
 - Use `fp.Flat(points, single_face=True)` for an open surface (e.g. a terrain), \
 to flatten it on a single map.
 - Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
