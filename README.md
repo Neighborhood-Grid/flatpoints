@@ -67,7 +67,7 @@ chart = flat.charts[0]                         # left face: vertices (indices in
 
 To map the surface properly to a square, flatpoints need to cut it first in two hemispheres \
 if needed. The hemispheric cut will remove some (not all) topological closedness. Residual  \
-closedness (e.g. for a torus, which cannot be opened by a single cut) will also be automatically
+closedness (e.g. for a torus, which cannot be opened by a single cut) will also be automatically \
 cut by shearing the surface further on each hemisphere.
 
 - Use `fp.Flat(points, single_face=True)` for an open surface (e.g. a terrain), \
