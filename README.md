@@ -4,6 +4,9 @@ Turn a 3D point cloud sampled on a latent unknown surface into something flat:
 
 ![bunny](plots/_bunny.webp)
 
+[▶️ bunny 🐇 ](plots/_bunny.webp)
+[▶️ dragon🐉 ](plots/_dragon.webp)
+
 flatpoints take raw point clouds as inputs and compute two kinds of flattening: 
 - **UV**: 2D coordinates of the points, xyz -> uv: `uv_geodesic_shortcut` (close to the
   distances, keeps the shape recognisable) or `uv_conformal` (angle preserving, no overlap).
