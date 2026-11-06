@@ -41,3 +41,5 @@ if __name__ == "__main__":
     #flat.imshow(points[:, 2])        # 1 channel: colormap, here the height
     #flat.imshow(flat.uv_conformal)   # 2 channels: bivariate colormap, here (u, v)
     plt.show()
+    # The same, animated (webp): the images fold into the surface in 3D, and back
+    flat.imshow(animate=f"plots/{model}.webp")  # resolution="high": cleaner, slower

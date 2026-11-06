@@ -6,6 +6,8 @@ Use them as methods: `flat.plot()`, `flat.imshow(data)` (see `main.Viz`), `sampl
 Two colourings: RGB = normalised x, y, z, and a checkerboard on the grid cells. A good
 flattening gives smooth colours and regular, undistorted squares.
 """
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.collections import PolyCollection
@@ -109,12 +111,7 @@ def imshow(image, sigma=0.5, cmap="viridis"):
                for f, ax in enumerate(axes)]
         fig.colorbar(ims[0], cax=fig.add_subplot(grid[0, k]))
     else:
-        if c == 2:
-            colours = _bivariate(_unit(a))
-        else:
-            colours = _unit(a if c == 3 else _pca(a, 3))
-        ok = np.isfinite(a).all(-1, keepdims=True)
-        rgba = np.concatenate([np.where(ok, colours, 1), ok], -1)
+        rgba = _colour(a)
         for f, ax in enumerate(axes):
             ax.imshow(rgba[f], interpolation="nearest")
         if c == 2:  # key: the colour square, axes in the units of the channels
@@ -133,7 +130,133 @@ def imshow(image, sigma=0.5, cmap="viridis"):
     return fig
 
 
+# morph: (grid size, frames per second, inches per panel, supersampling, WebP quality and
+# method) per resolution
+RESOLUTIONS = {"low": (40, 15, 3.0, 1, 75, 0), "high": (None, 25, 4.5, 2, 90, 4)}
+
+
+def morph(image, xyz, normal_axis="x", sigma=0.5, cmap="viridis", path=None,
+          resolution="low", loops=5, seconds=1.2, pause=0.5):
+    """Animation, one panel per face: the quad mesh of the face's image (quads between
+    neighbouring pixels) folds from the flat image into the surface in 3D, and back.
+    Colours as `imshow` (`image`, `sigma`, `cmap`), shaded by the orientation of the
+    quads as in `plot`; `xyz` (n_faces, n, n, 3): the point of each pixel, e.g.
+    `flat.to_image(flat.points)`, seen as in `plot` (`normal_axis`), at the same scale in
+    all the panels. The quads across a seam (a side JUMP times longer than the sides
+    around it in 3D, see `_alpha`) fade out on the way, the others stay opaque.
+    Occlusion: the quads are drawn far first, at every frame. A morph lasts `seconds`,
+    each end is held `pause` seconds.
+
+    `resolution`: "low" (light and fast, a few seconds: the grids downsampled to about
+    40 x 40 pixels, smoothed first) or "high" (all the pixels, 25 frames per second,
+    rendered at twice the size then reduced, no aliasing: up to a minute to write).
+    Saved as an animated WebP (smooth gradients, lighter than a gif, shown by browsers,
+    GitHub and VS Code) to `path` (".webp") if given, played `loops` times (there and
+    back) then still.
+    Returns the matplotlib animation (in a notebook, display it with
+    `IPython.display.HTML(anim.to_jshtml())`)."""
+    from matplotlib.animation import FuncAnimation
+    if resolution not in RESOLUTIONS:
+        raise ValueError(f"resolution must be one of {list(RESOLUTIONS)}, got {resolution!r}")
+    if path is not None and not str(path).lower().endswith(".webp"):
+        raise ValueError(f"the animation is saved as an animated WebP: path must end with "
+                         f".webp, got {path!r}")
+    size, fps, inches, scale, quality, method = RESOLUTIONS[resolution]
+    if resolution == "high":
+        warnings.warn("high resolution animation activated, writing the webp will take up "
+                      "to a minute...", stacklevel=3)
+    a = _faces(np.asarray(image, float))
+    k, n = len(a), a.shape[1]
+    st = 1 if size is None else max(1, int(np.ceil(n / size)))  # every st-th pixel
+    a = gaussian_filter(a, (0, max(sigma, st / 2), max(sigma, st / 2), 0))
+    rgba = _colour(a, cmap)[:, ::st, ::st]
+    end = (np.asarray(xyz, float).reshape(k, n, n, 3) @ camera(normal_axis).T)[:, ::st, ::st]
+    m = end.shape[1]
+    step = max(np.ptp(e[..., 1]) for e in end) / (m - 1)  # images as tall as the tallest face
+    i, j = np.indices((m, m))
+    image_grid = np.stack([j - (m - 1) / 2, (m - 1) / 2 - i, np.zeros((m, m))], -1) * step
+    faces = []
+    for e, c in zip(end, rgba):  # per face: start, end grids, quad colours and opacities
+        centre = (e.reshape(-1, 3).min(0) + e.reshape(-1, 3).max(0)) / 2 * [1, 1, 0]
+        q = _quads(c)
+        faces.append(dict(start=image_grid + centre, end=e, rgb=q[..., :3].mean(2),
+                          alpha=q[..., 3].min(2), seam=_alpha(e) >= ALPHA_RATE * ALPHA_MAX))
+    # the same window in all the panels, around each face
+    mids = [(f["end"].reshape(-1, 3).min(0) + f["end"].reshape(-1, 3).max(0))[:2] / 2
+            for f in faces]
+    half = np.max([np.abs(np.concatenate([f["start"], f["end"]]).reshape(-1, 3)[:, :2] - mid)
+                   .max(0) for f, mid in zip(faces, mids)], 0) + step
+
+    fig, axes = plt.subplots(1, k, figsize=(inches * k, inches * (half[1] / half[0] + 0.1)),
+                             dpi=100 * scale, squeeze=False)
+    fig.subplots_adjust(0, 0, 1, 0.92, wspace=0.02)
+    for ax, mid, name, f in zip(axes[0], mids, ["left", "right"] if k == 2 else [""], faces):
+        ax.set(xlim=(mid[0] - half[0], mid[0] + half[0]),
+               ylim=(mid[1] - half[1], mid[1] + half[1]), aspect="equal", title=name)
+        ax.set_axis_off()
+        f["quads"] = PolyCollection([], linewidths=0.3)
+        ax.add_collection(f["quads"])
+
+    hold, move = round(pause * fps), round(seconds * fps)
+    t = np.linspace(0, 1, move)
+    ease = t * t * (3 - 2 * t)  # smoothstep: slow start and end
+    times = np.concatenate([np.zeros(hold), ease, np.ones(hold), ease[::-1]])
+
+    def frame(t):
+        for f in faces:
+            q = _quads((1 - t) * f["start"] + t * f["end"])
+            nrm = np.cross(q[..., 2, :] - q[..., 0, :], q[..., 3, :] - q[..., 1, :])
+            shade = 0.55 + 0.45 * abs(nrm @ SUN) / np.maximum(np.linalg.norm(nrm, axis=-1),
+                                                                1e-12)
+            alpha = f["alpha"] * (1 - t * (1 - f["seam"]))
+            colour = _rgba(f["rgb"] * shade[..., None], alpha).reshape(-1, 4)
+            order = np.argsort(q[..., 2].mean(-1).ravel(), kind="stable")  # far first
+            colour = colour[order]
+            f["quads"].set_verts(q[..., :2].reshape(-1, 4, 2)[order])
+            f["quads"].set_facecolors(colour)  # edges in the face colour (no hairline
+            f["quads"].set_edgecolors(np.where(colour[:, 3:] < 1, 0, colour))  # gaps)
+        return [f["quads"] for f in faces]
+
+    if path is not None:  # before the animation, which hides its artists from fig.draw
+        _save_webp(fig, frame, times, path, fps, loops, scale, quality, method)
+    anim = FuncAnimation(fig, frame, frames=times, interval=1000 / fps, blit=True)
+    plt.close(fig)
+    return anim
+
+
+def _save_webp(fig, frame, times, path, fps, loops=5, scale=1, quality=80, method=0):
+    """Save the frames as an animated WebP (millions of colours: smooth gradients, light).
+    Frames rendered at `scale` times the size are reduced (supersampling: no aliasing).
+    Played `loops` times, then still. `quality` (0-100) and `method` (0 fast - 6 small)
+    of the lossy WebP encoder."""
+    from PIL import Image
+    frames = []
+    for t in times:
+        frame(t)
+        fig.canvas.draw()
+        f = Image.fromarray(np.array(fig.canvas.buffer_rgba())[..., :3])
+        if scale > 1:
+            f = f.resize((f.width // scale, f.height // scale), Image.Resampling.LANCZOS)
+        frames.append(f)
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=round(1000 / fps),
+                   loop=loops, quality=quality, method=method)
+
+
 # ==== Building blocks ==================================================================
+
+def _colour(a, cmap="viridis"):
+    """(F, n, n, 4) RGBA of the (F, n, n, C) channels, as in `imshow`; NaN: transparent."""
+    c = a.shape[-1]
+    if c == 1:
+        v = a[..., 0]
+        lo, hi = np.nanmin(v), np.nanmax(v)
+        colours = plt.get_cmap(cmap)((v - lo) / (hi - lo if hi > lo else 1))[..., :3]
+    elif c == 2:
+        colours = _bivariate(_unit(a))
+    else:
+        colours = _unit(a if c == 3 else _pca(a, 3))
+    ok = np.isfinite(a).all(-1, keepdims=True)
+    return np.concatenate([np.where(ok, colours, 1), ok], -1)
 
 def sampled_grids(flat, st=1, uv="geodesic_shortcut"):
     """{face: {"xyz", "uv", "rgb": (m, m, .) grids, "alpha": (m-1, m-1)}}, every `st`-th

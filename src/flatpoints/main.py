@@ -39,14 +39,20 @@ class Viz:
         from .viz import plot
         return plot(self, uv, squares, point_size)
 
-    def imshow(self, data=None, sigma=0.5, cmap="viridis"):
+    def imshow(self, data=None, sigma=0.5, cmap="viridis", animate=False, resolution="low"):
         """`data` on the images of the flat, one image per face. `data`: per-point values
         (N, *C), placed by `to_image`, or images already (n_faces, n, n, *C); default:
         the points, RGB = x, y, z. Smoothed by a Gaussian of `sigma` pixels, coloured by
         the number of channels C = prod(*C): 1 colormap `cmap`, 2 bivariate colormap,
         3 RGB, > 3 RGB of the 3 first principal components (see `viz.imshow`).
-        Returns the figure."""
-        from .viz import imshow
+        Returns the figure.
+
+        `animate`: True, or a path to save a .webp (animated WebP, played 5 times, then
+        still): instead, the images (same colours) fold into the surface in 3D and back,
+        one panel per face (see `viz.morph`). `resolution`: "low" (a few seconds) or
+        "high" (no aliasing, up to a minute to write). Returns the matplotlib animation (in a
+        notebook: `IPython.display.HTML(anim.to_jshtml())`)."""
+        from .viz import imshow, morph
         data = self.points if data is None else np.asarray(data)
         if len(data) != len(self.points):
             if data.shape[:3] != (self.n_faces, self.n, self.n):
@@ -54,6 +60,9 @@ class Viz:
                                  f"({self.n_faces}, {self.n}, {self.n}, *C), got {data.shape}")
         else:
             data = self.to_image(data)
+        if animate is not False:
+            return morph(data, self.to_image(self.points), self.normal_axis, sigma, cmap,
+                         path=None if animate is True else animate, resolution=resolution)
         return imshow(data, sigma, cmap)
 
 

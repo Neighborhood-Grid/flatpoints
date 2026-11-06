@@ -1,5 +1,7 @@
 # flatpoints
 
+![bunny](plots/bunny.webp)
+
 Turn a 3D point cloud sampled on a latent (unknown) surface into something flat:
 - **UV**: 2D coordinates of the points, xyz -> uv: `uv_geodesic_shortcut` (close to the
   distances, keeps the shape recognisable) or `uv_conformal` (angle preserving, no overlap).
@@ -51,6 +53,7 @@ i = 42 #point with index 42
 face, row, col = flat.pixels[i] # face = 0 or 1 for left and right hemispheres (see the Cut section)
 image = flat.to_image(z)    # full pixel image,  (N, *C) to  (1, n, n, *C) or (2, n, n, *C) 
 fig = flat.imshow(z)        # plot the image 
+anim = flat.imshow(z, animate="z.webp") # animated webp: the images fold into the surface in 3D
 
 #II. UV (2D embeding of the points on the surface, xyz -> uv):
 uv = flat.uv_geodesic_shortcut #(N, 2) better visual aspects
