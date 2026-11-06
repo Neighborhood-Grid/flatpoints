@@ -16,17 +16,14 @@ LANDMARKS = [(a, b) for a in (0, 0.5, 1) for b in (0, 0.5, 1)] + [
 
 # === Grids ====
 
-def axes(lateral, up):
-    """Indices (0, 1 or 2) of the lateral and up axes; up=None picks the default (the
-    last non-lateral axis in xyz order)."""
-    if lateral not in ("x", "y", "z"):
-        raise ValueError('lateral must be "x", "y" or "z"')
-    l = "xyz".index(lateral)
-    if up is None:
-        return l, 1 if l == 2 else 2
-    if up not in ("x", "y", "z") or up == lateral:
-        raise ValueError('up must be "x", "y" or "z", different from lateral')
-    return l, "xyz".index(up)
+def axes(normal_axis):
+    """Indices (0, 1 or 2) of the normal, horizontal and up axes. Up (followed by v, the
+    rows of the images) is z, or y if the normal axis is z; horizontal is the third one."""
+    if normal_axis not in ("x", "y", "z"):
+        raise ValueError('normal_axis must be "x", "y" or "z"')
+    normal = "xyz".index(normal_axis)
+    up = 1 if normal == 2 else 2
+    return normal, 3 - normal - up, up
 
 
 def grid_sort(X, n, verbose=False):

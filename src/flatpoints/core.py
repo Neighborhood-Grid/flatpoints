@@ -4,7 +4,7 @@ Two independent flattenings of the same face (see Method.md):
 
     Geodesic uv with shortcuts (`geodesic_shortcut_uv`):
         1. temporary naive grid: the points sorted on an n x n grid by their two
-           non-lateral coordinates (gridpoints);
+           coordinates other than the normal axis (gridpoints);
         2. approximate geodesic distances along that grid, from a few landmarks;
         3. landmark Isomap of these distances, oriented as the object (feet down).
 
@@ -35,13 +35,13 @@ def geodesic_shortcut_uv(P, ab, n, verbose=False):
     """(M, 2) geodesic uv of the M points of a face, in [0, 1]^2.
 
     The geodesics are measured on a naive grid of the points (sorted by `ab`, their two
-    non-lateral coordinates), which links points that are close in that projection: the
-    distances take some shortcuts across folds of the surface, which keeps the uv close
+    coordinates other than the normal axis), which links points that are close in that
+    projection: the distances take some shortcuts across folds of the surface, which keeps the uv close
     to the side view of the object, at the price of some distortion (see Method.md).
     """
     pos = np.c_[np.divmod(np.arange(n * n), n)] / (n - 1)  # cell (row, col) in [0, 1]
 
-    # 1. Naive grid, from the non-lateral coordinates
+    # 1. Naive grid, from the coordinates other than the normal axis
     slot = grid_sort(ab, n, verbose)  # cell -> point, -1 if empty
     real = slot >= 0
     cell = np.empty(len(P), int)  # point -> cell

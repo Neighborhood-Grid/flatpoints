@@ -10,10 +10,11 @@ if __name__ == "__main__":
     model = sys.argv[1].lstrip("-") if len(sys.argv) > 1 else "cow"
     points = np.load(f"data/{model}_points.npy")  # (N, 3)
 
-    # A closed object (cow, bunny...) is cut in two faces, left and right, across `lateral`.
-    # A terrain (everest) is an open surface: a single face, seen from above (lateral = z).
+    # A closed object (cow, bunny...) is cut in two faces, left and right, across the
+    # normal axis x. A terrain (everest) is an open surface: a single face, seen from above
+    # (normal axis z).
     everest = model == "everest"
-    flat = fp.Flat(points, single_face=everest, lateral="z" if everest else "x")
+    flat = fp.Flat(points, single_face=everest, normal_axis="z" if everest else "x")
 
     print("points  ", points.shape)               # (N, 3)
     print("mesh    ", flat.mesh.vertices.shape, flat.mesh.triangles.shape)  # reconstructed surface
@@ -24,8 +25,8 @@ if __name__ == "__main__":
         print("faces   ", {f: len(i) for f, i in flat.faces.items()})
 
     # I. UV: xyz -> uv, geodesic with shortcuts (default) or conformal
-    fp.plot(flat).savefig(f"plots/{model}.png")
-    #fp.plot(flat, uv="conformal").savefig(f"plots/{model}_conformal.png")
+    flat.plot().savefig(f"plots/{model}.png")
+    #flat.plot(uv="conformal").savefig(f"plots/{model}_conformal.png")
     plt.show()
 
     # II. Images: idx -> row, column
@@ -34,5 +35,9 @@ if __name__ == "__main__":
     image[tuple(flat.pixels.T)] = points                              # each point on its pixel
     image[tuple(flat.corners.pixels.T)] = points[flat.corners.idxs]   # fill the empty pixels
     assert np.array_equal(image, flat.to_image(points))               # the same, in one call
-    fp.imshow(image[0])  # left face (or the only one), rgb channels = xyz
+
+    # Any per-point data (N, *C) as images, one per face, coloured by its channels C:
+    flat.imshow()                    # default: the points, RGB = x, y, z
+    #flat.imshow(points[:, 2])        # 1 channel: colormap, here the height
+    #flat.imshow(flat.uv_conformal)   # 2 channels: bivariate colormap, here (u, v)
     plt.show()

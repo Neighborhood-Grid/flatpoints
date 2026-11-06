@@ -14,13 +14,13 @@ points ──► mesh + cut ──┬──► naive grid (temporary) ──► 
 
 - **Mesh.** A closed surface is reconstructed by screened Poisson (open3d) from the cloud
   and its estimated normals. An open surface (`single_face=True`, e.g. a terrain) is
-  triangulated by a 2D Delaunay of the points in their two non-lateral coordinates,
-  without the long thin triangles along the convex hull.
-- **Cut.** The mesh is split in two faces, left and right of the median of the lateral
-  axis. Each face grows triangle by triangle from its extreme triangle, and accepts a
-  triangle only if it stays a topological disk (one connected piece, one boundary loop,
-  no pinched vertex). This works whatever the genus of the mesh: the few triangles of a
-  handle that would close a loop stay out of both faces.
+  triangulated by a 2D Delaunay of the points in their two coordinates other than the
+  normal axis, without the long thin triangles along the convex hull.
+- **Cut.** A closed mesh is split in two faces, left and right of the median of the
+  normal axis (`normal_axis`). Each face grows triangle by triangle from its extreme
+  triangle, and accepts a triangle only if it stays a topological disk (one connected
+  piece, one boundary loop, no pinched vertex). This works whatever the genus of the
+  mesh: the few triangles of a handle that would close a loop stay out of both faces.
 - **Points.** Each point is projected on the mesh; it belongs to the face of the
   triangle it falls in. Both pipelines below use this same split.
 
@@ -29,15 +29,17 @@ points ──► mesh + cut ──┬──► naive grid (temporary) ──► 
 Per face, on the points only (the mesh is not used):
 
 1. **Temporary naive grid.** The points are sorted on an n x n grid by their two
-   non-lateral coordinates (gridpoints), i.e. by their position in the side view. This
-   grid only serves to build a neighbourhood graph and is then discarded.
+   coordinates other than the normal axis (gridpoints), i.e. by their position in the
+   view along the normal axis. This grid only serves to build a neighbourhood graph and
+   is then discarded.
 2. **Geodesics.** Each cell is linked to the cells at most 4 rows and columns away, by
    an edge of 3D length x weighted x + 0.1 x²/h (h: typical edge length). Distances from
    13 landmarks (corners, edge middles, centre, quarter centres of the grid) are shortest
    paths in this graph.
 3. **Flattening.** Landmark Isomap: the landmarks are placed by classical MDS of their
    pairwise distances, every point by triangulation from its distances to them. The
-   result is rotated so that u follows the horizontal axis and v the up axis.
+   result is rotated so that v follows the up axis (z, or y if the normal axis is z)
+   and u the third axis.
 
 **Shortcuts.** Two points close in the side view are neighbours on the naive grid even
 when they are far apart on the surface (e.g. two coils of the dragon's body). The penalty

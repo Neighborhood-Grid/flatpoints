@@ -13,7 +13,7 @@ MODELS = ["airplane", "armadillo", "bunny", "cow", "dragon", "everest", "horse",
 def flatten(model):
     points = np.load(f"data/{model}_points.npy")  # (N, 3)
     everest = model == "everest"  # open surface: a single face, seen from above
-    return fp.Flat(points, single_face=everest, lateral="z" if everest else "x")
+    return fp.Flat(points, single_face=everest, normal_axis="z" if everest else "x")
 
 
 if __name__ == "__main__":

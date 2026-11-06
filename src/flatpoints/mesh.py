@@ -1,8 +1,9 @@
 """Meshes of flatpoints: surface reconstruction, hemisphere cut, points on the mesh.
 
 A closed surface (two faces) is reconstructed from the cloud by screened Poisson (open3d),
-then cut in two topological disks across the median of the lateral axis. An open surface
-(single face, e.g. a terrain) is triangulated in its two non-lateral coordinates.
+then cut in two topological disks across the median of the normal axis. An open surface
+(single face, e.g. a terrain) is triangulated in its two coordinates other than the
+normal axis.
 """
 import heapq
 
@@ -48,10 +49,11 @@ def planar_mesh(points, ab):
 
 # === Hemisphere cut ===
 
-def hemisphere_cut(V, F, lateral, threshold):
-    """Split the closed mesh (V, F) in two disks across `threshold` on the lateral axis.
+def hemisphere_cut(V, F, normal, threshold):
+    """Split the closed mesh (V, F) in two disks across `threshold` on the normal axis
+    (index `normal`).
 
-    Each face grows from its extreme triangle as a sweep along the lateral axis, first on
+    Each face grows from its extreme triangle as a sweep along the normal axis, first on
     its own side of the threshold, then both take what remains, closest to the threshold
     first. The growth keeps each face a disk (see `grow`), whatever the genus of the mesh:
     triangles of a handle, that would close a loop, stay out of both faces.
@@ -59,7 +61,7 @@ def hemisphere_cut(V, F, lateral, threshold):
     Returns:
         (F,) 0 (left), 1 (right) or -1 (out) for each triangle.
     """
-    x = V[F, lateral].mean(1)
+    x = V[F, normal].mean(1)
     nbr = neighbours(F)
     side = np.full(len(F), -1)
     side[np.argmin(x)], side[np.argmax(x)] = 0, 1

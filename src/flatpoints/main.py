@@ -9,6 +9,8 @@
 
 `Flat.resample` (a `Resampler`) uses the images of the flat to transport a 2D point set
 (by default a hyperuniform seed) onto the surface: (row, col) -> xyz.
+
+`Flat.plot` and `Flat.imshow` (from the `Viz` mixin) draw the flat, with matplotlib.
 """
 from functools import cached_property
 
@@ -21,25 +23,63 @@ from .mesh import closest_on_mesh, hemisphere_cut, planar_mesh, poisson_mesh, su
 from .utils import axes, fill_empty, Chart, Corners, Mesh, _window, _seeds, ON_SURFACE
 
 
-class Flat:
+class Viz:
+    """Plots of a `Flat`, as its methods: `flat.plot()` and `flat.imshow(data)`.
+
+    Needs matplotlib (`pip install -e ".[viz]"`), imported only when a plot is drawn.
+    The drawing itself is in `viz.py`."""
+
+    def plot(self, uv="geodesic_shortcut", squares=8, point_size=1.0):
+        """The flattening at a glance. First column: the faces in 3D; then one column per
+        face in (u, v), `uv` being "geodesic_shortcut" (`uv_geodesic_shortcut`) or
+        "conformal" (`uv_conformal`). First row coloured by RGB = normalised x, y, z,
+        second row by a checkerboard of `squares` x `squares` pixels: a good flattening
+        gives smooth colours and regular squares. `point_size` scales the points.
+        Returns the figure."""
+        from .viz import plot
+        return plot(self, uv, squares, point_size)
+
+    def imshow(self, data=None, sigma=0.5, cmap="viridis"):
+        """`data` on the images of the flat, one image per face. `data`: per-point values
+        (N, *C), placed by `to_image`, or images already (n_faces, n, n, *C); default:
+        the points, RGB = x, y, z. Smoothed by a Gaussian of `sigma` pixels, coloured by
+        the number of channels C = prod(*C): 1 colormap `cmap`, 2 bivariate colormap,
+        3 RGB, > 3 RGB of the 3 first principal components (see `viz.imshow`).
+        Returns the figure."""
+        from .viz import imshow
+        data = self.points if data is None else np.asarray(data)
+        if len(data) != len(self.points):
+            if data.shape[:3] != (self.n_faces, self.n, self.n):
+                raise ValueError(f"data must be per point ({len(self.points)}, *C) or images "
+                                 f"({self.n_faces}, {self.n}, {self.n}, *C), got {data.shape}")
+        else:
+            data = self.to_image(data)
+        return imshow(data, sigma, cmap)
+
+
+class Flat(Viz):
     """Flatten a 3D point cloud: a mesh, two uv maps and one or two square images.
 
     Pipeline (see Method.md): the surface is meshed (Poisson reconstruction, or 2D
     Delaunay for an open surface) and cut into one or two topological disks, the faces
-    (left and right of the median of the lateral axis). Each point takes the face of its
+    (left and right of the median of the normal axis). Each point takes the face of its
     projection on the mesh. Then, per face, independently:
-    - geodesic uv with shortcuts: temporary naive grid of the points (gridpoints on their
-      non-lateral coordinates), geodesics along it, landmark Isomap;
+    - geodesic uv with shortcuts: temporary naive grid of the points (gridpoints on
+      their two coordinates other than the normal axis), geodesics along it, landmark
+      Isomap;
     - conformal uv: rectangular conformal map of the face's mesh, interpolated at the
       projections of the points; the image sorts the points by their conformal uv
       (gridpoints).
 
     Args:
         points: (N, 3) points sampled on a surface.
-        single_face: one chart and one image for an open surface (e.g. a terrain, seen
-            along `lateral`), instead of two for a closed one (left and right of `lateral`).
-        lateral: axis across which the surface is cut, "x", "y" or "z".
-        up: axis followed by v (the rows of the images, upwards), "x", "y" or "z".
+        single_face: one chart and one image for an open surface (e.g. a terrain),
+            instead of two for a closed one.
+        normal_axis: "x", "y" or "z", the axis the surface is seen along. A closed
+            surface is cut across it, in two faces on either side of its median (left
+            and right for "x"); an open surface is roughly normal to it (e.g. "z" for a
+            terrain seen from above). v (the rows of the images, upwards) follows z, or y
+            if normal_axis is "z"; u follows the third axis.
         verbose: print progress.
 
     Attributes:
@@ -48,10 +88,17 @@ class Flat:
         uv_conformal: (N, 2) conformal uv of each point in [0, 1]^2, per face.
         uv_geodesic_shortcut: (N, 2) geodesic uv with shortcuts, in [0, 1]^2, per face.
         n: side of the images; n_faces: number of faces (1 or 2).
+        normal_axis, single_face: the arguments.
         pixels: (N, 3) (face, row, col) of each point.
         faces: {"left": idx, "right": idx} points of each face, None if single_face.
         corners: padding of the empty pixels: copy points[corners.idxs] into
             corners.pixels (face, row, col).
+
+    Methods:
+        to_image(values): per-point values (N, ...) on the images, (n_faces, n, n, ...).
+        resample(n_points): new points evenly spread on the surface, a `Resampler`.
+        plot(uv): the surface in 3D and in (u, v) (from `Viz`, needs matplotlib).
+        imshow(data): per-point data or images, one image per face (from `Viz`).
 
     Example:
         flat = Flat(points)
@@ -60,22 +107,22 @@ class Flat:
         uv = flat.uv_geodesic_shortcut      # (N, 2), or flat.uv_conformal
         V, T = flat.mesh.vertices, flat.mesh.triangles
         new = flat.resample(512).points     # (512, 3) new points on the surface
+        flat.plot()                         # 3D and geodesic uv; flat.plot("conformal")
+        flat.imshow()                       # the images, RGB = xyz
+        flat.imshow(points[:, 2])           # any per-point data, here the height
     """
 
-    def __init__(self, points, single_face=False, lateral="x", up="z", verbose=False):
+    def __init__(self, points, single_face=False, normal_axis="x", verbose=False):
         self.points = P = np.asarray(points, float)
-        if up == lateral:
-            up = "y" if lateral == "z" else "z"
-        self.lateral, self.up, self.single_face = lateral, up, single_face
-        lat, vert = axes(lateral, up)
-        horiz = 3 - lat - vert
+        self.normal_axis, self.single_face = normal_axis, single_face
+        normal, horiz, vert = axes(normal_axis)
 
         # 1. Mesh, cut into charts
         if single_face:
             V, F, side = planar_mesh(P, P[:, [horiz, vert]])
         else:
             V, F = poisson_mesh(P)
-            side = hemisphere_cut(V, F, lat, np.median(P[:, lat]))
+            side = hemisphere_cut(V, F, normal, np.median(P[:, normal]))
         self.mesh = Mesh(V, F, side)
         if verbose:
             print(f"mesh: {len(V)} vertices, {len(F)} triangles, "

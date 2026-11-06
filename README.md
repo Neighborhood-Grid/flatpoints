@@ -32,12 +32,13 @@ python exemple_flat.py --bunny
 
 ## Usage
 
+
 ```python
 import numpy as np
 import src.flatpoints as fp
 
 xyz = np.load("data/bunny_points.npy") #raw (N, 3) points, on a latent (unknown) surface
-data = xyz #(N, *C) data related to the point cloud, e.g. the points themselves
+z = xyz[:, -1] #(N, *C) any data related to the point cloud, e.g. the z coordinate
 
 # ==== Build the flat object ============
 
@@ -48,13 +49,14 @@ flat = fp.Flat(xyz) # Apply the flattening processing of the surface
 #I. Pixels and Images (learned multi index of the points: idx -> row, column)
 i = 42 #point with index 42
 face, row, col = flat.pixels[i] # face = 0 or 1 for left and right hemispheres (see the Cut section)
-image = flat.to_image(data)    # full pixel image,  (N, *C) to  (1, n, n, *C) or (2, n, n, *C) 
+image = flat.to_image(z)    # full pixel image,  (N, *C) to  (1, n, n, *C) or (2, n, n, *C) 
+fig = flat.imshow(z)        # plot the image 
 
 #II. UV (2D embeding of the points on the surface, xyz -> uv):
 uv = flat.uv_geodesic_shortcut #(N, 2) better visual aspects
 uv = flat.uv_conformal         #(N, 2) angle preserving, no overlaps
-fig = fp.plot(flat)                  # 3D and uv_geodesic_shortcut
-fig = fp.plot(flat, uv="conformal")  # 3D and uv_conformal
+fig = flat.plot()                    # 3D and uv_geodesic_shortcut
+fig = flat.plot(uv="conformal")      # 3D and uv_conformal
 
 # ==== Reuse the internal mesh (generated with open 3D):
 
@@ -75,6 +77,12 @@ to flatten it on a single map.
 - Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
 to flatten left and right hemispheres independently. 
 
+`normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the \
+surface is seen along: `single_face = False` (two hemispheres) will cut roughly across it, and \
+`single_face = True` (open surface) will use it as an heuristic to project the data.The normal \
+axis used has a strong impact on the accuracy of the Flat, be sure to use a normal axis consistant \
+with your point cloud (eg it can be the third axis after applying a PCA).
+
 See [exemple_flat.py](exemple_flat.py).
 
 ## Application: resampling a point cloud
@@ -90,7 +98,7 @@ cloud is harder, because there is no surface to sample from, only points.
 cloud. So one can sample points in the unit square and transport them onto the surface by
 bilinear interpolation, (row, col) → xyz.
 
-By default, `fp.Resampler` uses a hyperuniform 2D seed (blue noise), so the new points are
+By default, `flat.resample` uses a hyperuniform 2D seed (blue noise), so the new points are
 fairly evenly spread over the surface.
 
 ```python

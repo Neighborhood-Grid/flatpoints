@@ -1,5 +1,7 @@
 """Plots of a `Flat`: `plot` shows the surface in 3D and in (u, v), `imshow` the grids.
 Plot of a `Resampler`: `plot_resampler` shows the resampled points on the surface of the Flat.
+Use them as methods: `flat.plot()`, `flat.imshow(data)` (see `main.Viz`), `sampler.plot()`;
+`imshow` also works on its own, on any (n, n, *C) or (n_faces, n, n, *C) array.
 
 Two colourings: RGB = normalised x, y, z, and a checkerboard on the grid cells. A good
 flattening gives smooth colours and regular, undistorted squares.
@@ -9,6 +11,8 @@ import numpy as np
 from matplotlib.collections import PolyCollection
 from scipy.ndimage import gaussian_filter, label, median_filter
 from scipy.spatial import cKDTree
+
+from .utils import axes
 
 CHECKER = np.array([[0.15, 0.25, 0.45], [0.98, 0.75, 0.45]])  # dark blue, light orange
 JUMP, ALPHA_RATE = 3, 0.5  # opacity ALPHA when a side is JUMP times the median side around it
@@ -26,7 +30,7 @@ def plot(flat, uv="geodesic_shortcut", squares=8, point_size=1.0):
     st = max(1, flat.n // 110)  # downsampling for faster plot
     grids = sampled_grids(flat, st, uv)
     k, m = len(grids), len(next(iter(grids.values()))["xyz"])  # m: side of the drawn grids
-    proj = camera(flat.lateral, flat.up)
+    proj = camera(flat.normal_axis)
     fig = plt.figure(figsize=(4 + 3 * k, 6.5), layout="constrained")
     grid = fig.add_gridspec(2, 1 + k, width_ratios=[1.5] + [1] * k)
     size = (300 * point_size / m) ** 2  # marker area (pt^2): about half a grid step
@@ -53,7 +57,7 @@ def plot_resampler(sampler, ax=None, point_size=1.0, light=0.45, radius=None):
     drawn in `ax`. `radius` of the discs: default from the mean area per point, so that
     two resamplers with as many points get the same discs. Returns the figure."""
     flat, points = sampler.flat, sampler.points
-    proj = camera(flat.lateral, flat.up)
+    proj = camera(flat.normal_axis)
     if ax is None:
         fig, (before, ax) = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True,
                                          layout="constrained")
@@ -80,14 +84,52 @@ def plot_resampler(sampler, ax=None, point_size=1.0, light=0.45, radius=None):
     return ax.figure
 
 
-def imshow(xyz, sigma=0.5):
-    """An xyz grid (n, n, 3), e.g. `flat.to_image(points)[0]`, as an RGB image: normalised
-    x, y, z, smoothed by a Gaussian of `sigma` pixels."""
-    points = xyz.reshape(-1, 3)
-    fig, ax = plt.subplots()
-    lo, hi = points.min(0)[None, None], points.max(0)[None, None]
-    ax.imshow(gaussian_filter((xyz - lo)/(hi - lo), (sigma, sigma, 0)), interpolation="nearest")
-    ax.set_axis_off()
+def imshow(image, sigma=0.5, cmap="viridis"):
+    """Grids as images, one per face: `image` (n, n, *C) or (1, n, n, *C) for one face,
+    (2, n, n, *C) for two (left, right), e.g. `flat.to_image(points)`. The C = prod(*C)
+    channels are smoothed by a Gaussian of `sigma` pixels, then coloured with a range
+    shared by the faces:
+      C = 1: colormap `cmap`, with a colorbar;
+      C = 2: bivariate colormap (one channel per axis of a colour square), with its key;
+      C = 3: RGB = the channels normalised (e.g. x, y, z);
+      C > 3: RGB = the 3 first principal components (PCA over all the pixels).
+    NaN pixels are left transparent."""
+    a = gaussian_filter(_faces(np.asarray(image, float)), (0, sigma, sigma, 0))
+    k, c = len(a), a.shape[-1]
+    side = {1: 0.07, 2: 0.3}.get(c)  # width of the colorbar / key, relative to a face
+    fig = plt.figure(figsize=(4 * k + 4 * (side or 0) + 0.6 * (c <= 2), 4),
+                     layout="constrained")
+    grid = fig.add_gridspec(1, k + (c <= 2), width_ratios=[1] * k + [side] * (c <= 2))
+    axes = [fig.add_subplot(grid[0, f]) for f in range(k)]
+    names = ["left", "right"] if k == 2 else [""]
+    if c == 1:
+        v = a[..., 0]
+        lo, hi = np.nanmin(v), np.nanmax(v)
+        ims = [ax.imshow(v[f], cmap=cmap, vmin=lo, vmax=hi, interpolation="nearest")
+               for f, ax in enumerate(axes)]
+        fig.colorbar(ims[0], cax=fig.add_subplot(grid[0, k]))
+    else:
+        if c == 2:
+            colours = _bivariate(_unit(a))
+        else:
+            colours = _unit(a if c == 3 else _pca(a, 3))
+        ok = np.isfinite(a).all(-1, keepdims=True)
+        rgba = np.concatenate([np.where(ok, colours, 1), ok], -1)
+        for f, ax in enumerate(axes):
+            ax.imshow(rgba[f], interpolation="nearest")
+        if c == 2:  # key: the colour square, axes in the units of the channels
+            key = fig.add_subplot(grid[0, k], xlabel="channel 0", ylabel="channel 1")
+            (x0, y0), (x1, y1) = np.nanmin(a, (0, 1, 2)), np.nanmax(a, (0, 1, 2))
+            s = np.linspace(0, 1, 64)
+            key.imshow(_bivariate(np.stack(np.meshgrid(s, s), -1)), origin="lower",
+                       extent=(x0, x1, y0, y1), aspect="auto")
+            key.set_box_aspect(1)
+            key.set_xticks([x0, x1], [f"{x0:.3g}", f"{x1:.3g}"])
+            key.set_yticks([y0, y1], [f"{y0:.3g}", f"{y1:.3g}"])
+            key.tick_params(labelsize=7)
+    for ax, name in zip(axes, names):
+        ax.set_axis_off()
+        ax.set_title(name + (" (PCA)" if c > 3 else ""))
     return fig
 
 
@@ -126,12 +168,13 @@ def surface_area(points, k=8):
     return len(points) * np.mean(np.pi * d ** 2) / k
 
 
-def camera(lateral, up, elev=15, azim=30):
-    """(3, 3) rotation from xyz to the camera axes (right, up, towards the viewer): a side
-    view from the `lateral` axis, with the remaining axis to the right (as u in the 2D
-    panels), turned by `azim` degrees around `up` and raised by `elev` degrees."""
+def camera(normal_axis, elev=15, azim=30):
+    """(3, 3) rotation from xyz to the camera axes (right, up, towards the viewer): a view
+    along `normal_axis`, with the up axis of the images up (z, or y if normal_axis is z)
+    and the third axis to the right (as u in the 2D panels), turned by `azim` degrees
+    around the up axis and raised by `elev` degrees."""
     e = np.eye(3)
-    l, u = "xyz".index(lateral), "xyz".index(up)
+    l, _, u = axes(normal_axis)
     side = e[l] * np.sign(np.cross(e[u], e[l]) @ e[3 - l - u])
     az, el = np.radians(azim), np.radians(elev)
     eye = np.cos(el) * (np.cos(az) * side + np.sin(az) * np.cross(e[u], side)) \
@@ -202,6 +245,44 @@ def _checker(n, squares):
     """(n, n, 3) colours of the cells of an n x n grid: `squares` x `squares` squares."""
     i, j = np.indices((n, n)) // int(np.ceil(n / squares))
     return CHECKER[(i + j) % 2]
+
+
+BIVARIATE = np.array([[[0.91, 0.91, 0.91], [0.35, 0.65, 0.85]],  # (0, 0) grey, (0, 1) blue
+                      [[0.85, 0.45, 0.35], [0.25, 0.15, 0.40]]])  # (1, 0) red, (1, 1) purple
+
+
+def _faces(a):
+    """(F, n, n, C) from (n, n, *C) or (F, n, n, *C), F = 1 or 2."""
+    if a.ndim >= 2 and a.shape[0] == a.shape[1]:
+        a = a[None]
+    elif not (a.ndim >= 3 and a.shape[0] in (1, 2) and a.shape[1] == a.shape[2]):
+        raise ValueError(f"expected (n, n, *C), (1, n, n, *C) or (2, n, n, *C), got {a.shape}")
+    return a.reshape(*a.shape[:3], -1)
+
+
+def _unit(a):
+    """Each channel (last axis) of `a` to [0, 1] by its range over all the pixels."""
+    lo, hi = np.nanmin(a, tuple(range(a.ndim - 1))), np.nanmax(a, tuple(range(a.ndim - 1)))
+    return np.clip((a - lo) / np.where(hi > lo, hi - lo, 1), 0, 1)
+
+
+def _bivariate(t):
+    """(..., 3) colours of (..., 2) values in [0, 1]^2: bilinear between the 4 corners of
+    BIVARIATE."""
+    x, y = t[..., :1], t[..., 1:2]
+    return ((1 - x) * ((1 - y) * BIVARIATE[0, 0] + y * BIVARIATE[0, 1])
+            + x * ((1 - y) * BIVARIATE[1, 0] + y * BIVARIATE[1, 1]))
+
+
+def _pca(a, k):
+    """(..., k) projection of the channels (last axis) of `a` on their k first principal
+    components, fitted on the finite pixels."""
+    x = a.reshape(-1, a.shape[-1])
+    ok = np.isfinite(x).all(1)
+    mean = x[ok].mean(0)
+    vt = np.linalg.svd(x[ok] - mean, full_matrices=False)[2][:k]
+    vt *= np.sign(vt[np.arange(len(vt)), np.abs(vt).argmax(1)])[:, None]  # stable signs
+    return ((x - mean) @ vt.T).reshape(*a.shape[:-1], len(vt))
 
 
 def _rgba(rgb, alpha):
