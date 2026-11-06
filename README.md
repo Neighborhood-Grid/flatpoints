@@ -1,11 +1,16 @@
 # flatpoints
 
-Turn a 3D point cloud sampled on a surface into something flat:
-- Isomaps: smooth parametrisation of the surface, xyz -> uv 
-- Images: a square `(n, n)` pixel structure for multi indexing,  idx -> (row, column). \
-    Each pixel holds one point of the cloud, neighbor pixels hold neighbor points.
+Turn a 3D point cloud sampled on a latent (unknown) surface into something flat:
+- **UV**: 2D coordinates of the points, xyz -> uv: `uv_geodesic_shortcut` (close to the
+  distances, keeps the shape recognisable) or `uv_conformal` (angle preserving, no overlap).
+- **Images**: a square `(n, n)` pixel structure for multi indexing, idx -> (row, column).
+  Each pixel holds one point of the cloud, neighbour pixels hold neighbour points.
 
 You can then use 2D tools on the point cloud: convolutions, SVD, image codecs…
+How it works: see [Method.md](Method.md).
+
+Note: During the flatpoints process, a mesh of the point cloud is generated using Open3D. \
+The mesh itself can be useful, so it is also exposed.
 
 ![bunny](plots/bunny.png)
 ![dragon](plots/dragon.png)
@@ -13,13 +18,13 @@ You can then use 2D tools on the point cloud: convolutions, SVD, image codecs…
 ## Install
 
 ```bash
-pip install -e ".[viz]"
+pip install -e ".[viz]"   # numpy, scipy, gridpoints, open3d (+ matplotlib)
 ```
 
 ## Quickstart
 
-Take a raw 3D point cloud (N, 3), and flatten it to 2D. \
-Available: bunny, dragon, airplane, cow, everest...
+Take a raw 3D point cloud `(N, 3)` and flatten it to 2D.
+Available models: bunny, dragon, airplane, cow, everest…
 
 ```bash
 python exemple_flat.py --bunny
@@ -28,67 +33,97 @@ python exemple_flat.py --bunny
 ## Usage
 
 ```python
-xyz = np.load("data/bunny_points.npy") #raw (N, 3) point cloud
+import numpy as np
+import src.flatpoints as fp
+
+xyz = np.load("data/bunny_points.npy") #raw (N, 3) points, on a latent (unknown) surface
 data = xyz #(N, *C) data related to the point cloud, e.g. the points themselves
 
 # ==== Build the flat object ============
 
-flat = Flat(xyz) # Apply the flattening processing of the surface
+flat = fp.Flat(xyz) # Apply the flattening processing of the surface
 
 # ==== Use it  ==========================
 
-#I. Isomaps (projection of the points, latent 2D coordinates on the surface xyz -> uv):
-uv = flat.uv #(N, 2)
-
-#II. Pixels (learned multi index of the points: idx -> row, column)
+#I. Pixels and Images (learned multi index of the points: idx -> row, column)
 i = 42 #point with index 42
-face, row, col = flat.pixels[i] # face = 0 or 1 for left and right hemispheres (see topology section)
+face, row, col = flat.pixels[i] # face = 0 or 1 for left and right hemispheres (see the Cut section)
+image = flat.to_image(data)    # full image based on the pixels,  (N, *C) to  (1, n, n, *C) / (2, n, n, *C) 
 
-#III. Images (convert any data to an image using the pixel layout):
-image = flat.to_image(data)    # (N, *C) to  (2, n, n, *C)
+#II. UV (2D embeding of the points on the surface, xyz -> uv):
+uv = flat.uv_geodesic_shortcut #(N, 2) better visual aspects
+uv = flat.uv_conformal         #(N, 2) angle preserving, no overlaps (if the topology allow it)
+fig = fp.plot(flat)                  # 3D and uv_geodesic_shortcut
+fig = fp.plot(flat, uv="conformal")  # 3D and uv_conformal
+
+# ==== Reuse the internal mesh (generated with open 3D):
+
+V, T = flat.mesh.vertices, flat.mesh.triangles # (V, 3), (T, 3)
+face = flat.mesh.face                          # (T,) face of each triangle: 0, 1, or -1 (in no face)
+chart = flat.charts[0]                         # left face: vertices (indices in V), triangles, uv_conformal
 ```
 
-### Topology
+### Cut
 
-Use `fp.Flat(points, single_face=True)` for an open surface (e.g. a terrain), \
+To map the surface properly to a square, flatpoints need to cut it first in two hemispheres \
+if needed. This will remove some (not all) topology related issues.
+- Use `fp.Flat(points, single_face=True)` for an open surface (e.g. a terrain), \
 to flatten it on a single map.
-
-Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
-to flatten left and right hemispheres independantly
+- Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
+to flatten left and right hemispheres independently. 
 
 See [exemple_flat.py](exemple_flat.py).
 
-## An application exemple: Resampling from a point cloud
-
-While sampling from a mesh is relatively easy (by sampling uniformly on each of its
-triangles), it is difficult to resample from a point cloud: the usual subsampling method
-(farthest point sampling) can only pick points of the input cloud. 
-Flatpoints provides the missing parametrisation which allow to work on the latent surface directly:
-Because it maps the 2D unit square to the point cloud surface through the `to_image` paradygm, one
-just needs to sample points on the 2D unit square and then transport them to the surface
-by bilinear interpolation, (row, col) -> xyz.
-By default, flatpoints.Resampler use hyperuniform 2D seeds (blue noise), so the new points are evenly spread
-over the surface.
-
-```python
-sampler = Resampler(xyz, n=256)  # n new points per face (calls Flat(xyz))
-new = sampler.points             # (2 * 256, 3) the new points
-flat = sampler.flat              # the Flat of xyz
-sampler.plot()                   # new points on the mesh of the full cloud
-
-other = Resampler(xyz, n=256, seed=1)  # a new resampling, independent from the previous one
-```
-
-See [exemple_sampler.py](exemple_sampler.py).
+## Application: resampling a point cloud
 
 ```bash
-python exemple_sampler.py --bunny # plots/bunny_resampled.png 
-python exemple_sampler.py --all   # plots/resampled.png 
+python exemple_sampler.py --bunny       # plots_resampling/bunny_resampled.png
 ```
 
-![hyperuniform resampling: before, after](plots/bunny_resampled.png)
+Sampling from a mesh is easy: sample uniformly on each triangle. Resampling from a point
+cloud is harder, because there is no surface to sample from, only points.
+
+`Flat` provides that missing surface: through `to_image`, it maps the unit square onto the
+cloud. So one can sample points in the unit square and transport them onto the surface by
+bilinear interpolation, (row, col) → xyz.
+
+By default, `fp.Resampler` uses a hyperuniform 2D seed (blue noise), so the new points are
+fairly evenly spread over the surface.
+
+```python
+sampler = flat.resample(n_points=512)   # n new points in total
+new = sampler.points                    # (512, 3)
+sampler.plot()                          # before / after
+other = flat.resample(n_points=512, seed=1)  # a new resampling, with different seed
+```
+**To be honest:** if you only need a subset of the input points, farthest point sampling
+(FPS) are more uniform than flatpoints (figure bellow), this is mainly an exemple usecase to show how to use the Flat to transport properties (like good spatial repartition) from the simple unit square to an arbitrary surface.
+
+
+![hyperuniform resampling: comparison](plots_resampling/bunny_comparison.png)
 
 ## Licence
 
-- code: MIT
+- code: MIT, except `src/flatpoints/rcm.py`.
+- `src/flatpoints/rcm.py`: Python port (modified) of
+  [garyptchoi/rectangular-conformal-map](https://github.com/garyptchoi/rectangular-conformal-map),
+  Copyright (c) 2015-2024 Gary Pui-Tung Choi, Apache License 2.0, see
+  [LICENSE-rectangular-conformal-map](LICENSE-rectangular-conformal-map).
 - data: see [data/README.md](data/README.md).
+
+## Acknowledgement
+
+The conformal uv and the images rely on the rectangular conformal map of:
+
+```bibtex
+@article{meng2016tempo,
+  title   = {{TEMPO}: Feature-Endowed {T}eichm{\"u}ller Extremal Mappings of Point Clouds},
+  author  = {Meng, Ting Wei and Choi, Gary Pui-Tung and Lui, Lok Ming},
+  journal = {SIAM Journal on Imaging Sciences},
+  volume  = {9},
+  number  = {4},
+  pages   = {1922--1962},
+  year    = {2016},
+  doi     = {10.1137/15M1049117}
+}
+```

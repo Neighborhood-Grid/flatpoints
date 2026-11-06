@@ -18,12 +18,13 @@ LIGHT = 1.0  # strength of the background quads in (u, v): 0 = white, 1 = full c
 SUN = np.array([-0.3, 0.5, 1]) / np.linalg.norm([-0.3, 0.5, 1])  # light direction (camera)
 
 
-def plot(flat, squares=8, point_size=1.0):
-    """First column: all the faces in 3D. Then one column per face in (u, v).
-    First row coloured by RGB, second row by a checkerboard of `squares` x `squares`.
-    `point_size` scales the diameter of the points (1 = default)."""
+def plot(flat, uv="geodesic_shortcut", squares=8, point_size=1.0):
+    """First column: all the faces in 3D. Then one column per face in (u, v), `uv` being
+    "geodesic_shortcut" (flat.uv_geodesic_shortcut) or "conformal" (flat.uv_conformal).
+    First row coloured by RGB, second row by a checkerboard of `squares` x `squares`
+    pixels. `point_size` scales the diameter of the points (1 = default)."""
     st = max(1, flat.n // 110)  # downsampling for faster plot
-    grids = sampled_grids(flat, st)
+    grids = sampled_grids(flat, st, uv)
     k, m = len(grids), len(next(iter(grids.values()))["xyz"])  # m: side of the drawn grids
     proj = camera(flat.lateral, flat.up)
     fig = plt.figure(figsize=(4 + 3 * k, 6.5), layout="constrained")
@@ -37,7 +38,7 @@ def plot(flat, squares=8, point_size=1.0):
         for c, (f, g) in enumerate(grids.items(), start=1):
             ax = fig.add_subplot(grid[row, c], aspect="equal", xlim=(0, 1), ylim=(0, 1),
                                  xticks=[0, .5, 1], yticks=[0, .5, 1], xlabel="u", ylabel="v",
-                                 title=f"{f + ': ' if f else ''}uv, {name}")
+                                 title=f"{f + ': ' if f else ''}{uv.split('_')[0]} uv")
             light = 1 - LIGHT * (1 - _quads(col[f]).mean(2))  # quads, washed towards white
             _add(ax, _quads(g["uv"]).reshape(-1, 4, 2), _rgba(light, g["alpha"]).reshape(-1, 4))
             ax.scatter(*g["uv"].reshape(-1, 2).T, c=col[f].reshape(-1, 3), s=size,
@@ -92,16 +93,20 @@ def imshow(xyz, sigma=0.5):
 
 # ==== Building blocks ==================================================================
 
-def sampled_grids(flat, st=1):
+def sampled_grids(flat, st=1, uv="geodesic_shortcut"):
     """{face: {"xyz", "uv", "rgb": (m, m, .) grids, "alpha": (m-1, m-1)}}, every `st`-th
-    cell of the (n, n) grids of `flat`. A drawn quad takes the lowest opacity of the quads
-    of the full grid it covers."""
+    cell of the (n, n) grids of `flat`, with its `uv` ("geodesic_shortcut" or
+    "conformal"). A drawn quad takes the lowest opacity of the quads of the full grid it
+    covers."""
+    if uv not in ("geodesic_shortcut", "conformal"):
+        raise ValueError('uv must be "geodesic_shortcut" or "conformal"')
+    coords = getattr(flat, f"uv_{uv}")
     s, norm = slice(None, None, st), rgb(flat.points)
     out = {}
     for f, g in _grids(flat).items():
-        a = _alpha(flat.uv[g])
+        a = _alpha(coords[g])
         m = len(g[s, s])
-        out[f] = {"xyz": flat.points[g[s, s]], "uv": flat.uv[g[s, s]], "rgb": norm[g[s, s]],
+        out[f] = {"xyz": flat.points[g[s, s]], "uv": coords[g[s, s]], "rgb": norm[g[s, s]],
                   "alpha": np.minimum.reduce([a[i::st, j::st][:m - 1, :m - 1]
                                               for i in range(st) for j in range(st)])}
     return out

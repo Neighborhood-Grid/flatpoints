@@ -16,15 +16,16 @@ if __name__ == "__main__":
     flat = fp.Flat(points, single_face=everest, lateral="z" if everest else "x")
 
     print("points  ", points.shape)               # (N, 3)
-    print("uv      ", flat.uv.shape)              # (N, 2)  flat coordinates in [0, 1]
+    print("mesh    ", flat.mesh.vertices.shape, flat.mesh.triangles.shape)  # reconstructed surface
+    print("uv      ", flat.uv_geodesic_shortcut.shape)  # (N, 2) in [0, 1] per face, also flat.uv_conformal
     print("pixels  ", flat.pixels.shape)          # (N, 3)  (face, row, col), face 0 if single face
     print("padding ", flat.corners.idxs.shape)    # (Npadding,) points repeated in the empty pixels (to fill the full n*n grid)
     if flat.faces is not None:
         print("faces   ", {f: len(i) for f, i in flat.faces.items()})
 
-    # I. ISOMAPS: xyz -> uv
-    fig = fp.plot(flat)
-    fig.savefig(f"plots/{model}.png")
+    # I. UV: xyz -> uv, geodesic with shortcuts (default) or conformal
+    fp.plot(flat).savefig(f"plots/{model}.png")
+    #fp.plot(flat, uv="conformal").savefig(f"plots/{model}_conformal.png")
     plt.show()
 
     # II. Images: idx -> row, column
@@ -33,6 +34,5 @@ if __name__ == "__main__":
     image[tuple(flat.pixels.T)] = points                              # each point on its pixel
     image[tuple(flat.corners.pixels.T)] = points[flat.corners.idxs]   # fill the empty pixels
     assert np.array_equal(image, flat.to_image(points))               # the same, in one call
-    #Uncomment to show it, left face (or the only one), rgb channels = xyz
-    #fp.imshow(image[0])
-    #plt.show()
+    fp.imshow(image[0])  # left face (or the only one), rgb channels = xyz
+    plt.show()

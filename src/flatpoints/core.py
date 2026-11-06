@@ -1,21 +1,23 @@
-"""Core of flatpoints: lay out the points of one face on a square grid.
+"""Core of flatpoints: the uv and the image of one face (a chart of the cut surface).
 
-Pipeline (`layout`):
-    1. Naive grid: sort the points on the grid by their two non-lateral coordinates (e.g.
-       y, z). Fast, but distorted where the surface is steep.
-    2. Geodesics: approximate distances along the surface, from a few landmark points,
-       using a graph that links nearby cells of the naive grid.
-    3. Flattening: compute 2D coordinates (u, v) that best preserve these distances
-       (landmark Isomap).
-    4. Orientation: rotate (u, v) so that v follows the `up` axis and u the remaining one,
-       so that the result keeps the orientation of the object (e.g. feet down).
-    5. Final grid: sort the points on the grid again, this time by (u, v).
+Two independent flattenings of the same face (see Method.md):
+
+    Geodesic uv with shortcuts (`geodesic_shortcut_uv`):
+        1. temporary naive grid: the points sorted on an n x n grid by their two
+           non-lateral coordinates (gridpoints);
+        2. approximate geodesic distances along that grid, from a few landmarks;
+        3. landmark Isomap of these distances, oriented as the object (feet down).
+
+    Conformal uv and image (`conformal_uv`, `image_cells`):
+        1. rectangular conformal map of the mesh of the face onto the unit square;
+        2. the image: the points sorted on an n x n grid by their conformal uv (gridpoints).
 """
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import dijkstra
 
-from .utils import grid_sort, landmarks, orient
+from .rcm import boundary_loop, rectangular_conformal_map
+from .utils import grid_sort, landmarks
 
 # Grid graph used for geodesics: each cell is linked to the cells at most RADIUS rows and
 # columns away.
@@ -23,27 +25,26 @@ RADIUS = 4
 # Penalty on long edges (relative to the typical edge length), so that shortest paths
 # follow the surface instead of jumping across gaps between non-adjacent parts.
 EPS = 0.1
+# Number of random points used to fit the orientation of (u, v).
+ROTATION_SAMPLES = 50
 
 
-def layout(P, ab, n, verbose=False, rotation=True):
-    """Lay out M <= n*n points on an n x n grid (steps 1-6 above).
+# === Geodesic uv with shortcuts ===
 
-    Args:
-        P: (M, 3) xyz.
-        ab: (M, 2) the two non-lateral coordinates.
+def geodesic_shortcut_uv(P, ab, n, verbose=False):
+    """(M, 2) geodesic uv of the M points of a face, in [0, 1]^2.
 
-    Returns:
-        cells: (n, n) index of each cell's point in P, -1 for empty cells; image layout
-            (u along columns, v up the rows).
-        uv: (M, 2) flat coordinates of each point, in [0, 1].
+    The geodesics are measured on a naive grid of the points (sorted by `ab`, their two
+    non-lateral coordinates), which links points that are close in that projection: the
+    distances take some shortcuts across folds of the surface, which keeps the uv close
+    to the side view of the object, at the price of some distortion (see Method.md).
     """
-    # (row, col) of each cell, scaled to [0, 1]; cells are numbered row-major
-    pos = np.c_[np.divmod(np.arange(n * n), n)] / (n - 1)
+    pos = np.c_[np.divmod(np.arange(n * n), n)] / (n - 1)  # cell (row, col) in [0, 1]
 
     # 1. Naive grid, from the non-lateral coordinates
     slot = grid_sort(ab, n, verbose)  # cell -> point, -1 if empty
     real = slot >= 0
-    cell = np.empty(len(P), int)  # point -> cell (inverse of slot)
+    cell = np.empty(len(P), int)  # point -> cell
     cell[slot[real]] = np.flatnonzero(real)
     grid = np.zeros((n * n, 3))
     grid[real] = P[slot[real]]
@@ -52,23 +53,17 @@ def layout(P, ab, n, verbose=False, rotation=True):
     marks = slot[landmarks(real, n)]
     D = geodesics(grid.reshape(n, n, 3), real, cell[marks])[:, cell]
 
-    # 3. Flattening, 4. Orientation
-    uv = isomap(D, marks, pos[cell])
-    if rotation:
-        uv = orient(uv, ab)
-
-    # 5. Final grid, u along the rows and v along the columns; transposed and flipped to
-    # the image layout (u along the columns, v up the rows)
-    return grid_sort(uv, n, verbose).reshape(n, n).T[::-1], uv
+    # 3. Flattening, oriented as the object
+    return orient(isomap(D, marks, pos[cell]), ab)
 
 
 def geodesics(grid, real, sources, radius=RADIUS, eps=EPS):
     """Approximate geodesic distances from `sources`, on a graph built from the grid.
 
     Each non-empty cell is linked to the non-empty cells at most `radius` rows and columns
-    away, with an edge weighted by the 3D distance between their points. Shortest paths
-    are chosen with a cost that penalises long edges (see `EPS`), but their length is the
-    sum of the true 3D distances.
+    away, by an edge of 3D length x weighted x + eps * x^2 / h (h: typical edge length).
+    The penalty makes the long edges, across gaps between non-adjacent parts of the
+    surface, cost more: shortest paths and their lengths both use these weights.
 
     Args:
         grid: (n, n, 3) xyz of the point in each cell.
@@ -98,15 +93,13 @@ def geodesics(grid, real, sources, radius=RADIUS, eps=EPS):
     h = np.median(x[(j - i == 1) | (j - i == n)])  # typical length, from direct neighbours
     graph = lambda w: coo_matrix((w, (i, j)), shape=(n * n, n * n)).tocsr()  # noqa: E731
 
-    # Shortest paths for the penalised cost x + eps * x^2 / h (long edges cost more)...
-    cost, pred = dijkstra(graph(x*(1 + eps * x / h)), directed=False, indices=sources,
-                          return_predecessors=True)
+    W = graph(x * (1 + eps * x / h))
+    cost, pred = dijkstra(W, directed=False, indices=sources, return_predecessors=True)
 
-    # ...but measured with their true length, the sum of x along each path. Each cell
-    # starts with the length of the edge to its predecessor; pointer doubling then adds
-    # up the edges back to the source in log2(n*n) steps.
-    X = graph(x*(1 + eps * x / h))
-    X = X + X.T
+    # Length of each path: each cell starts with the weight of the edge to its
+    # predecessor; pointer doubling then adds up the edges back to the source in
+    # log2(n*n) steps.
+    X = W + W.T
     rows = np.arange(len(sources))[:, None]
     up = np.where(pred >= 0, pred, np.arange(n * n))  # source/unreached: points to itself
     D = np.asarray(X[up.ravel(), np.tile(np.arange(n * n), len(sources))]).reshape(up.shape)
@@ -149,3 +142,48 @@ def isomap(D, marks, pos):
     Y = (Y - Y[ok].min(0)) / np.ptp(Y[ok], 0)  # each axis scaled to [0, 1]
     Y[~ok] = pos[~ok]
     return Y
+
+
+def orient(uv, ab, n_samples=ROTATION_SAMPLES):
+    """Rotate (u, v) so that u follows ab[:, 0] and v follows ab[:, 1] as closely as
+    possible (orthogonal Procrustes, fitted on a few random points to keep it fast).
+    A reflection is allowed, to undo a mirrored flattening.
+
+    Returns:
+        (M, 2) the rotated (u, v), each axis scaled to [0, 1].
+    """
+    rng = np.random.default_rng(0)  # fixed seed: same result on every run
+    s = rng.choice(len(uv), min(n_samples, len(uv)), replace=False)
+    A = uv[s] - uv[s].mean(0)
+    B = ab[s] - ab[s].mean(0)
+    B /= np.maximum(B.std(0), 1e-12)  # both target axes weigh the same
+    U, _, Vt = np.linalg.svd(A.T @ B)
+    uv = uv @ (U @ Vt)
+    return (uv - uv.min(0)) / np.maximum(np.ptp(uv, 0), 1e-12)
+
+
+# === Conformal uv and image ===
+
+def conformal_uv(V, F, ab):
+    """(nv, 2) conformal map of the disk mesh (V, F) onto the unit square.
+
+    Args:
+        ab: (nv, 2) horizontal and up coordinates of the vertices: the corners of the
+            square go to the boundary vertices closest to the corners of the silhouette.
+    """
+    loop = boundary_loop(F)
+    x = (ab[loop] - ab[loop].mean(0)) / np.maximum(ab[loop].std(0), 1e-12)
+    corner = [np.argmax(sa * x[:, 0] + sb * x[:, 1])  # position on the loop
+              for sa, sb in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    # the corners must follow each other along the loop, in one direction or the other
+    turn = np.argsort((np.array(corner) - corner[0]) % len(loop))
+    ordered = np.array_equal(turn, [0, 1, 2, 3]) or np.array_equal(turn, [0, 3, 2, 1])
+    if not ordered or len(set(corner)) < 4:
+        corner = corner[0] + np.arange(4) * len(loop) // 4  # odd silhouette: quarters
+    return rectangular_conformal_map(V, F, loop[np.mod(corner, len(loop))])
+
+
+def image_cells(uv, n, verbose=False):
+    """(n, n) index of the point of each pixel (-1: empty), from the uv of the points.
+    Image layout: u along the columns, v up the rows."""
+    return grid_sort(uv, n, verbose).reshape(n, n).T[::-1]
