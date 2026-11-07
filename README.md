@@ -28,9 +28,8 @@ coordinates, normals, colours, features... and the whole 2D toolbox applies to t
 cloud: convolutions and CNNs, SVD, grid interpolation…
 
 This is the idea of the *geometry images* of [Gu, Gortler & Hoppe (2002)](https://hhoppe.com/proj/gim/),
-which remesh a surface onto a completely regular grid, the geometry stored as an RGB
-image of xyz. flatpoints applies it directly to a point cloud: no remeshing, the pixels
-are the input points themselves. How it works: see [Method.md](Method.md).
+which remesh a surface onto a completely regular grid. flatpoints applies it directly to a point cloud. 
+How it works: see [Method.md](Method.md).
 
 ## Install
 
