@@ -2,13 +2,16 @@
 
 Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
-INPUT: raw point cloud
-
-![bunny points](plots_resampling/bunny_points_plot.png)
-
-OUTPUT: flat transformation
-
-![bunny flat](plots/_bunny.webp)
+<table>
+  <tr>
+    <th>INPUT: raw point cloud</th>
+    <th>OUTPUT: flat transformation</th>
+  </tr>
+  <tr>
+    <td><img src="plots_resampling/bunny_points_plot.png" alt="bunny points"></td>
+    <td><img src="plots/_bunny.webp" alt="bunny flat"></td>
+  </tr>
+</table>
 
 [▶️ bunny 🐇 ](plots/_bunny.webp) \
 [▶️ dragon🐉 ](plots/_dragon.webp)
