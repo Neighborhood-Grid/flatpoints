@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flatpoints"
+version = "0.1.0"
+description = "Flatten a point cloud into square images where neighbour pixels are neighbour points"
+readme = "README.md"
+license = "MIT AND Apache-2.0"  # MIT, except src/flatpoints/rcm.py (Apache-2.0)
+license-files = ["LICENSE", "LICENSE-rectangular-conformal-map"]
+authors = [{ name = "Armand de Cacqueray" }]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "gridpoints",
+    "open3d",
+]
+
+[project.optional-dependencies]
+viz = ["matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
