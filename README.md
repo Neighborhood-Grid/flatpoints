@@ -1,8 +1,14 @@
 # flatpoints
 
-Turn a 3D point cloud sampled on a latent (unknown) surface into an image:
+Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
-![bunny](plots/_bunny.webp)
+INPUT: raw point cloud
+
+![bunny points](plots_resampling/bunny_points_plot.png)
+
+OUTPUT: flat transformation
+
+![bunny flat](plots/_bunny.webp)
 
 [▶️ bunny 🐇 ](plots/_bunny.webp) \
 [▶️ dragon🐉 ](plots/_dragon.webp)
