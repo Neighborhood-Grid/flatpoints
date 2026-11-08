@@ -18,7 +18,7 @@ Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
 [▶️ bunny 🐇 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/bunny.webp) \
 [▶️ dragon🐉 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/dragon.webp) \
-[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) \
+[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) 
 
 flatpoints takes a raw point cloud `(N, 3)` and arranges its points on a square `(n, n)`
 grid of pixels:
