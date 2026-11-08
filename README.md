@@ -61,7 +61,7 @@ flat = fp.Flat(xyz) # Apply the flattening processing of the surface
 
 # ==== Use it: pixels and images ========
 
-i = 42, xyz[42] #point with index 42 (xyz[42])
+i = 42 #point with index 42 (xyz[42])
 face, row, col = flat.pixels[i] # face: 0 or 1 (see the Cut section)
 image_z = flat.to_image(z)    # full pixel image,  (N, *C) to  (1, n, n, *C) or (2, n, n, *C)
 fig = flat.plot()           # the surface in 3D and its images 
