@@ -82,10 +82,11 @@ to flatten it on a single image.
 to flatten left and right hemispheres independently, on two images.
 
 `normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the \
-surface is seen along: `single_face = False` (two hemispheres) will cut roughly across it, and \
-`single_face = True` (open surface) will use it as an heuristic to project the data. The normal \
-axis used has a strong impact on the accuracy of the Flat, be sure to use a normal axis consistant \
-with your point cloud (eg it can be the third axis after applying a PCA).
+surface is seen along: For `single_face = False` (two hemispheres), the left-right cut \
+will be roughly across it, so using a normal axis consistent with your point cloud can \
+help but is not mandatory. With `single_face = True`, normal_axis will just be used for \ 
+the 3D plots. \
+
 
 See [exemple_flat.py](exemple_flat.py).
 
