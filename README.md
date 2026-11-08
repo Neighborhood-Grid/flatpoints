@@ -134,7 +134,7 @@ compress well. `flat.compress` compresses them with one of three methods
 - `"svd"`: truncated SVD of each image.
 
 `factor` is the fraction of the storage saved against the points in float32 (96 bits per
-point), and `method="auto"` (default) keeps the most accurate method.
+point).
 
 ```python
 comp = flat.compress(factor=0.8)  # save 80% of the storage, best method
@@ -143,11 +143,6 @@ comp.code                         # what is stored, e.g. quantized DCT coefficie
 comp.points                       # (N, 3) reconstructed points, in the input order
 flat.compress(0.8, method="svd")  # a given method
 ```
-
-On the bunny, saving 80% of the storage (19 bits per point), the DCT moves the points by
-0.014 point spacing (RMS), the SVD by 1.1. Even at 99% (1 bit per point), the DCT stays
-around one point spacing. The sizes of dct and wavelet are those of an ideal entropy
-coder: a real one is a few percent larger.
 
 ![compression of the bunny](plots_compression/bunny.png)
 
