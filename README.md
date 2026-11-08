@@ -1,7 +1,7 @@
 # flatpoints
 
 [![PyPI](https://img.shields.io/pypi/v/flatpoints)](https://pypi.org/project/flatpoints/)
-[![GitHub](https://img.shields.io/badge/GitHub-neighborhood--grid%2Fflatpoints-181717?logo=github)](https://github.com/neighborhood-grid/flatpoints)
+[![GitHub](https://img.shields.io/badge/GitHub-flatpoints-blue?logo=github)](https://github.com/neighborhood-grid/flatpoints)
 
 Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
