@@ -36,7 +36,7 @@ How it works: see [Method.md](Method.md).
 Core only:
 
 ```bash
-pip install -e # numpy, scipy, gridpoints, open3d
+pip install -e . # numpy, scipy, gridpoints, open3d
 ```
 
 Optionals:
@@ -129,6 +129,8 @@ other = flat.resample(n_points=512, seed=1)  # a new resampling, with different 
 
 ## Application: compressing a point cloud
 
+needs PyWavelets and Pillow (`pip install -e ".[compress]"`)
+
 ```bash
 python exemple_compression.py --bunny   # plots_compression/bunny.png
 ```
@@ -137,10 +139,9 @@ Since neighbour pixels hold neighbour points, the xyz images are smooth, and smo
 compress well. `flat.compress` compresses them with one of three methods
 ([compressor.py](src/flatpoints/compressor.py)):
 
-- `"dct"`: 2D DCT, quantized and entropy coded per frequency band (as JPEG);
-- `"wavelet"`: 2D wavelets, quantized and entropy coded per subband (as JPEG2000), needs
-  PyWavelets (`pip install -e ".[compress]"`);
-- `"svd"`: truncated SVD of each image.
+- `"svd"`: truncated SVD 
+- `"dct"`: 2D DCT
+- `"wavelet"`: 2D wavelets
 
 `factor` is the fraction of the storage saved against the points in float32 (96 bits per
 point).
@@ -151,7 +152,8 @@ comp.method                       # "dct"
 comp.code                         # what is stored, e.g. quantized DCT coefficients and step
 comp.points                       # (N, 3) reconstructed points, in the input order
 flat.compress(0.8, method="svd")  # a given method
-comp.save("compressed.jp2") #fp.Compressor.read("compressed.jp2")
+comp.save("compressed.jp2")       #save the compressed structure
+points = fp.Compressor.read("compressed.jp2") #reconstructed (N, 3) point cloud
 ```
 
 ![compression of the bunny](plots_compression/bunny.png)
