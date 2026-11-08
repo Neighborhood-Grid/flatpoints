@@ -240,6 +240,9 @@ class Compressor:
         images: (n_faces, n, n, 3) the reconstructed xyz images.
         points: (N, 3) the reconstructed points, in the order of `flat.points`.
         error: RMS distance between the points and their reconstruction.
+
+    `bits` is a theoretical bound for dct and wavelet (ideal entropy coder). `save` writes a
+    real file, in JPEG2000, and `Compressor.read` reads it back.
     """
 
     def __init__(self, flat, factor=0.8, method="auto"):
@@ -265,3 +268,23 @@ class Compressor:
                 best = (name, code, bits, images, points, error)
         self.method, self.code, self.bits, self.images, self.points, self.error = best
         self.ratio = 1 - self.bits / raw
+
+    def save(self, path):
+        """Write the points to `path` as a JPEG2000 file (16 bits, any JPEG2000 reader opens
+        it), within the size budget of `factor`. The file holds the points, not their order.
+        Returns its size in bytes."""
+        from .compressor import to_jp2
+        flat = self.flat
+        n = flat.n
+        padding = (flat.corners.pixels * [n * n, n, 1]).sum(1)
+        data = to_jp2(flat.to_image(flat.points), padding, (1 - self.factor) * 32 * flat.points.size)
+        with open(path, "wb") as file:
+            file.write(data)
+        return len(data)
+
+    @staticmethod
+    def read(path):
+        """(N, 3) points of a file written by `save`, in the order of its pixels."""
+        from .compressor import from_jp2
+        with open(path, "rb") as file:
+            return from_jp2(file.read())

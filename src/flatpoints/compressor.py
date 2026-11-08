@@ -10,9 +10,14 @@ returns (code, reconstructed A, bits): what would be stored, what it decodes to,
   entropy coded per subband. Needs PyWavelets (`pip install PyWavelets`).
 
 dct and wavelet use the step of the quantization to fit the budget. Their size is the one of
-an ideal entropy coder per band (zeroth-order entropy): a real arithmetic coder is a few
-percent larger.
+an ideal entropy coder per band (zeroth-order entropy): a theoretical bound, a real arithmetic
+coder is a few percent larger.
+
+`to_jp2` / `from_jp2` write and read a real file instead: the images in JPEG2000 (16 bits),
+a standard format that any JPEG2000 reader opens. Needs Pillow.
 """
+import io
+import json
 from importlib.util import find_spec
 
 import numpy as np
@@ -95,3 +100,40 @@ def _quantize(C, bands, budget):
         lo, hi = (lo, mid) if size(np.exp(mid))[1] <= budget else (mid, hi)
     q, bits = size(np.exp(hi))
     return q.astype(np.int32), float(np.exp(hi)), bits
+
+
+# === JPEG2000 file ===
+
+def to_jp2(images, padding, budget):
+    """Bytes of a JPEG2000 file of the xyz images (n_faces, n, n, 3), at most `budget` bits.
+
+    The images are quantized to 16 bits within their bounding box and laid out in one
+    grayscale image: one row of images per face, x, y and z side by side. A JSON comment in
+    the file holds what the decoder needs: the number of faces, the bounding box and the
+    flat indices of the `padding` pixels (copies of other points, dropped when reading).
+    """
+    from PIL import Image
+    faces, n = images.shape[:2]
+    lo, hi = images.reshape(-1, 3).min(0), images.reshape(-1, 3).max(0)
+    q = np.round((images - lo) / np.maximum(hi - lo, 1e-30) * 65535).astype(np.uint16)
+    mosaic = q.transpose(0, 1, 3, 2).reshape(faces * n, 3 * n)  # face rows, x | y | z
+    header = json.dumps({"faces": faces, "lo": lo.tolist(), "hi": hi.tolist(),
+                         "padding": np.sort(padding).tolist()}, separators=(",", ":")).encode()
+    rate = 16 * mosaic.size / max(budget - 8 * len(header), 1)  # compression ratio asked
+    buffer = io.BytesIO()
+    Image.fromarray(mosaic).save(buffer, "JPEG2000", quality_mode="rates", irreversible=True,
+                                 quality_layers=[max(rate, 1.0)], comment=header)
+    return buffer.getvalue()
+
+
+def from_jp2(data):
+    """(N, 3) points of a file written by `to_jp2`, in the order of the pixels."""
+    from PIL import Image
+    image = Image.open(io.BytesIO(data))
+    header = json.loads(image.info["comment"])
+    faces = header["faces"]
+    n = image.size[1] // faces
+    q = np.asarray(image, float).reshape(faces, n, 3, n).transpose(0, 1, 3, 2)
+    lo, hi = np.array(header["lo"]), np.array(header["hi"])
+    points = (q / 65535 * (hi - lo) + lo).reshape(-1, 3)
+    return np.delete(points, header["padding"], axis=0)
