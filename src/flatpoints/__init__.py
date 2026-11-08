@@ -5,4 +5,4 @@ from .main import Compressor, Flat, Resampler
 
 __all__ = ["Flat", "Resampler", "Compressor", "load", "datasets",
            "exemple_flat", "exemple_sampler", "exemple_compression"]
-__version__ = "0.1.0"
+__version__ = "1.0.0"
