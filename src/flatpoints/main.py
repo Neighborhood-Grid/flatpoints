@@ -1,6 +1,6 @@
 """User-facing classes: `Flat` (point cloud -> images), `Resampler` (images -> new points
-on the surface) and `Compressor` (truncated SVD of the images). `Viz` adds the plots to
-`Flat`.
+on the surface) and `Compressor` (image compression of the points, see compressor.py).
+`Viz` adds the plots to `Flat`.
 """
 from functools import cached_property
 
@@ -133,10 +133,10 @@ class Flat(Viz):
         """`n_points` new points evenly spread on the surface, see `Resampler`."""
         return Resampler(self, n_points, seed, sigma)
 
-    def compress(self, factor=0.8):
-        """Truncated SVD of the xyz images, `factor` (e.g. 0.8) of the storage saved,
-        see `Compressor`."""
-        return Compressor(self, factor)
+    def compress(self, factor=0.8, method="auto"):
+        """Compress the points, `factor` (e.g. 0.8) of the storage saved, with `method`
+        ("auto": the most accurate), see `Compressor`."""
+        return Compressor(self, factor, method)
 
     @cached_property
     def _lifting(self):
@@ -218,35 +218,50 @@ class Resampler:
         return plot_resampler(self, ax=ax, point_size=point_size, **kwargs)
 
 
-class Compressor:
-    """Compress the points of a `Flat` by a truncated SVD of its xyz images
-    (`flat.compress(factor)`).
 
-    Each image (one per face and per coordinate, n x n) keeps its k largest singular
-    values: k (2n + 1) numbers instead of n². k is the largest rank that saves at least
-    `factor` of the 3N numbers of the points (but at least 1).
+class Compressor:
+    """Compress the points of a `Flat` through its xyz images (`flat.compress(factor)`).
+
+    The images are smooth (neighbour pixels hold neighbour points), so image compression
+    applies. Methods (see `compressor.py`): "svd" (truncated SVD), "dct" (quantized DCT,
+    as JPEG) and "wavelet" (quantized wavelets, as JPEG2000, needs PyWavelets); "auto"
+    runs the available ones and keeps the most accurate.
 
     Args:
-        factor: fraction of the storage saved, in [0, 1): 0.8 keeps 20% of the numbers.
+        factor: fraction of the storage saved, in [0, 1), against the points in float32
+            (96 bits per point): 0.8 keeps 20%, about 19 bits per point.
+        method: "auto", "svd", "dct" or "wavelet".
 
     Attributes:
-        U, S, Vt: the truncated SVD, (n_faces, 3, n, k), (n_faces, 3, k), (n_faces, 3, k, n).
-        k: rank kept.
-        ratio: storage actually saved, 1 - (U.size + S.size + Vt.size) / (3N).
+        method: the method used.
+        code: what is stored, arrays (n_faces, 3, ...): {"U", "S", "Vt"} for svd,
+            {"coefficients", "step", ...} for dct and wavelet (integers, times step).
+        bits: size of the code; ratio: storage actually saved, 1 - bits / (96 N).
         images: (n_faces, n, n, 3) the reconstructed xyz images.
         points: (N, 3) the reconstructed points, in the order of `flat.points`.
+        error: RMS distance between the points and their reconstruction.
     """
 
-    def __init__(self, flat, factor=0.8):
+    def __init__(self, flat, factor=0.8, method="auto"):
+        from . import compressor
         if not 0 <= factor < 1:
             raise ValueError("factor must be in [0, 1), e.g. 0.8 to save 80% of the storage")
+        methods = compressor.available() if method == "auto" else [method]
+        if method != "auto" and method not in compressor.METHODS:
+            raise ValueError(f"method must be 'auto' or one of {list(compressor.METHODS)}")
         self.flat, self.factor = flat, factor
-        n, faces = flat.n, flat.n_faces
-        budget = (1 - factor) * flat.points.size  # numbers we may store
-        self.k = k = int(np.clip(budget // (faces * 3 * (2 * n + 1)), 1, n))
+        raw = 32 * flat.points.size
         A = np.moveaxis(flat.to_image(flat.points), -1, 1)  # (n_faces, 3, n, n)
-        U, S, Vt = np.linalg.svd(A, full_matrices=False)
-        self.U, self.S, self.Vt = U[..., :k], S[..., :k], Vt[..., :k, :]
-        self.ratio = 1 - (self.U.size + self.S.size + self.Vt.size) / flat.points.size
-        self.images = np.moveaxis((self.U * self.S[..., None, :]) @ self.Vt, 1, -1)
-        self.points = self.images[tuple(flat.pixels.T)]
+        shape = A.shape
+        best = None
+        for name in methods:
+            code, rec, bits = compressor.METHODS[name](A.reshape(-1, *shape[2:]), (1 - factor) * raw)
+            images = np.moveaxis(rec.reshape(shape), 1, -1)
+            points = images[tuple(flat.pixels.T)]
+            error = np.sqrt(((points - flat.points) ** 2).sum(1).mean())
+            code = {k: v.reshape(shape[:2] + v.shape[1:]) if np.ndim(v) else v
+                    for k, v in code.items()}  # per face and coordinate
+            if best is None or error < best[-1]:
+                best = (name, code, bits, images, points, error)
+        self.method, self.code, self.bits, self.images, self.points, self.error = best
+        self.ratio = 1 - self.bits / raw
