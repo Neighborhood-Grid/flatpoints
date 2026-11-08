@@ -107,8 +107,8 @@ fp.exemple_sampler("bunny", save="plots")      # plots/resampling/bunny_resample
 Sampling from a mesh is easy: sample uniformly on each triangle. Resampling from a point
 cloud is harder, because there is no surface to sample from, only points.
 
-The images provide that missing surface: `to_image(xyz)` maps the unit square onto the
-cloud. So one can sample points in the unit square and transport them onto the surface by
+The images provide that missing surface: `to_image(xyz)` maps the cloud onto the unit 2D square. 
+So one can sample points in the square and transport them onto the surface by
 bilinear interpolation of the xyz image, (row, col) → xyz.
 
 By default, `flat.resample` uses a hyperuniform 2D seed (blue noise), so the new points are
