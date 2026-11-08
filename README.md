@@ -151,6 +151,7 @@ comp.method                       # "dct"
 comp.code                         # what is stored, e.g. quantized DCT coefficients and step
 comp.points                       # (N, 3) reconstructed points, in the input order
 flat.compress(0.8, method="svd")  # a given method
+comp.save("compressed.jp2") #fp.Compressor.read("compressed.jp2")
 ```
 
 ![compression of the bunny](plots_compression/bunny.png)
