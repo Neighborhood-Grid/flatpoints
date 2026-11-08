@@ -1,5 +1,8 @@
 # flatpoints
 
+[![PyPI](https://img.shields.io/pypi/v/flatpoints)](https://pypi.org/project/flatpoints/)
+[![GitHub](https://img.shields.io/badge/GitHub-neighborhood--grid%2Fflatpoints-181717?logo=github)](https://github.com/neighborhood-grid/flatpoints)
+
 Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
 <table>
@@ -8,13 +11,14 @@ Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
     <th>OUTPUT: flat transformation</th>
   </tr>
   <tr>
-    <td><img src="plots_resampling/bunny_points_plot.png" alt="bunny points"></td>
-    <td><img src="plots/_bunny.webp" alt="bunny flat"></td>
+    <td><img src="https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/resampling/bunny_points_plot.png" alt="bunny points"></td>
+    <td><img src="https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/bunny.webp" alt="bunny flat"></td>
   </tr>
 </table>
 
-[▶️ bunny 🐇 ](plots/_bunny.webp) \
-[▶️ dragon🐉 ](plots/_dragon.webp)
+[▶️ bunny 🐇 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/bunny.webp) \
+[▶️ dragon🐉 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/dragon.webp) \
+[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) \
 
 flatpoints takes a raw point cloud `(N, 3)` and arranges its points on a square `(n, n)`
 grid of pixels:
@@ -29,39 +33,35 @@ cloud: convolutions and CNNs, SVD, grid interpolation…
 
 This is the idea of the *geometry images* of [Gu, Gortler & Hoppe (2002)](https://hhoppe.com/proj/gim/),
 which remesh a surface onto a completely regular grid. flatpoints applies it directly to a point cloud. 
-How it works: see [Method.md](Method.md).
+How it works: see [Method.md](https://github.com/neighborhood-grid/flatpoints/blob/main/Method.md).
 
 ## Install
 
-Core only:
-
 ```bash
-pip install -e . # numpy, scipy, gridpoints, open3d
-```
-
-Optionals:
-
-```bash
-pip install -e ".[viz]"   # + matplotlib
-pip install -e ".[compress]" # + PyWavelets, Pillow
+pip install flatpoints                # core: numpy, scipy, gridpoints, open3d
+pip install "flatpoints[viz]"         # + matplotlib, Pillow (plots, animations)
+pip install "flatpoints[compress]"    # + PyWavelets, Pillow (compression)
+#or pip install "flatpoints[all]"     # (everything)
 ```
 
 ## Quickstart
 
 Take a raw 3D point cloud `(N, 3)` and turn it into images.
-Available models: bunny, dragon, airplane, cow, everest…
+Available models: bunny, dragon, elephant, airplane, cow, everest… (`fp.datasets()`)
 
-```bash
-python exemple_flat.py --bunny
+```python
+import flatpoints as fp
+fp.exemple_flat("bunny")   # prints the shapes, plots the surface and its images
+fp.exemple_flat("bunny", save="plots", animate=True)  # + saves plots/bunny.png and plots/animation/bunny.webp
 ```
 
 ## Usage
 
 ```python
 import numpy as np
-import src.flatpoints as fp
+import flatpoints as fp
 
-xyz = np.load("data/bunny_points.npy") #raw (N, 3) points, on a latent (unknown) surface
+xyz = fp.load("bunny") #raw (N, 3) points, on a latent (unknown) surface
 z = xyz[:, -1] #(N, *C) any data related to the point cloud, e.g. the z coordinate
 
 # ==== Build the flat object ============
@@ -97,12 +97,12 @@ with your point cloud (e.g. the third axis of a PCA). With `single_face = True` 
 surface), it only orients the image (which way is up, where the corners go); the mesh \
 itself is built in 3D, without any projection.
 
-See [exemple_flat.py](exemple_flat.py).
+See `fp.exemple_flat` ([examples.py](https://github.com/neighborhood-grid/flatpoints/blob/main/src/flatpoints/examples.py)).
 
 ## Application: resampling a point cloud
 
-```bash
-python exemple_sampler.py --bunny       # plots_resampling/bunny_resampled.png
+```python
+fp.exemple_sampler("bunny", save="plots")      # plots/resampling/bunny_resampled.png
 ```
 
 Sampling from a mesh is easy: sample uniformly on each triangle. Resampling from a point
@@ -122,22 +122,22 @@ sampler.plot()                          # before / after
 other = flat.resample(n_points=512, seed=1)  # a new resampling, with different seed
 ```
 **To be honest:** if you only need a subset of the input points, farthest point sampling
-(FPS) are more uniform than flatpoints (figure bellow), this is mainly an exemple usecase to show how to use the images to transport properties (like good spatial repartition) from the simple unit square to an arbitrary surface.
+(FPS) are more uniform than flatpoints (figure below), this is mainly an exemple usecase to show how to use the images to transport properties (like good spatial repartition) from the simple unit square to an arbitrary surface.
 
 
-![hyperuniform resampling: comparison](plots_resampling/bunny_comparison.png)
+![hyperuniform resampling: comparison](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/resampling/bunny_comparison.png)
 
 ## Application: compressing a point cloud
 
-needs PyWavelets and Pillow (`pip install -e ".[compress]"`)
+needs PyWavelets and Pillow (`pip install "flatpoints[compress]"`)
 
-```bash
-python exemple_compression.py --bunny   # plots_compression/bunny.png
+```python
+fp.exemple_compression("bunny", save="plots")  # plots/compression/bunny.png
 ```
 
 Since neighbour pixels hold neighbour points, the xyz images are smooth, and smooth images
 compress well. `flat.compress` compresses them with one of three methods
-([compressor.py](src/flatpoints/compressor.py)):
+([compressor.py](https://github.com/neighborhood-grid/flatpoints/blob/main/src/flatpoints/compressor.py)):
 
 - `"svd"`: truncated SVD 
 - `"dct"`: 2D DCT
@@ -156,7 +156,7 @@ comp.save("compressed.jp2")       #save the compressed structure
 points = fp.Compressor.read("compressed.jp2") #reconstructed (N, 3) point cloud
 ```
 
-![compression of the bunny](plots_compression/bunny.png)
+![compression of the bunny](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/compression/bunny.png)
 
 ## Licence
 
@@ -164,8 +164,13 @@ points = fp.Compressor.read("compressed.jp2") #reconstructed (N, 3) point cloud
 - `src/flatpoints/rcm.py`: Python port (modified) of
   [garyptchoi/rectangular-conformal-map](https://github.com/garyptchoi/rectangular-conformal-map),
   Copyright (c) 2015-2024 Gary Pui-Tung Choi, Apache License 2.0, see
-  [LICENSE-rectangular-conformal-map](LICENSE-rectangular-conformal-map).
-- data: see [data/README.md](data/README.md).
+  [LICENSE-rectangular-conformal-map](https://github.com/neighborhood-grid/flatpoints/blob/main/LICENSE-rectangular-conformal-map).
+- `src/flatpoints/data/seed.npy` (shipped in the package): hyperuniform point cloud from the
+  [Hyperuniform samples database](https://github.com/For-a-few-DPPs-more/hyperuniform-samplers),
+  MIT licence.
+- example point clouds (`data/`, downloaded by `fp.load`, not shipped in the package):
+  third-party models, each under its own terms (some research / non-commercial only), see
+  [data/README.md](https://github.com/neighborhood-grid/flatpoints/blob/main/data/README.md).
 
 ## Acknowledgement
 

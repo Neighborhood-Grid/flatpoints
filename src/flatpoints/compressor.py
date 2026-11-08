@@ -7,7 +7,7 @@ returns (code, reconstructed A, bits): what would be stored, what it decodes to,
 - dct: 2D DCT of each image, uniformly quantized, entropy coded per frequency band (as JPEG,
   with one transform over the whole image).
 - wavelet: 2D wavelet transform (biorthogonal 4.4, as JPEG2000), uniformly quantized,
-  entropy coded per subband. Needs PyWavelets (`pip install PyWavelets`).
+  entropy coded per subband. Needs PyWavelets (`pip install "flatpoints[compress]"`).
 
 dct and wavelet use the step of the quantization to fit the budget. Their size is the one of
 an ideal entropy coder per band (zeroth-order entropy): a theoretical bound, a real arithmetic

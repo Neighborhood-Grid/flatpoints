@@ -6,21 +6,60 @@ build-backend = "setuptools.build_meta"
 name = "flatpoints"
 version = "0.1.0"
 description = "Flatten a point cloud into square images where neighbour pixels are neighbour points"
-readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 license = "MIT AND Apache-2.0"  # MIT, except src/flatpoints/rcm.py (Apache-2.0)
 license-files = ["LICENSE", "LICENSE-rectangular-conformal-map"]
 authors = [{ name = "Armand de Cacqueray" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
+keywords = [
+    "point cloud",
+    "geometry images",
+    "surface parameterization",
+    "conformal map",
+    "mesh",
+    "flattening",
+    "resampling",
+    "compression",
+    "3D",
+    "computer graphics",
+    "geometry processing",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
 dependencies = [
     "numpy",
     "scipy",
-    "gridpoints",
+    "gridpoints>=1.1",
     "open3d",
 ]
 
 [project.optional-dependencies]
-viz = ["matplotlib"]
+viz = ["matplotlib", "Pillow"]
 compress = ["PyWavelets", "Pillow"]
+all = ["matplotlib", "PyWavelets", "Pillow"]
+
+[project.urls]
+Homepage = "https://github.com/neighborhood-grid/flatpoints"
+Source = "https://github.com/neighborhood-grid/flatpoints"
+Documentation = "https://github.com/neighborhood-grid/flatpoints/blob/main/Method.md"
+Issues = "https://github.com/neighborhood-grid/flatpoints/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+flatpoints = ["data/seed.npy"]

@@ -86,7 +86,7 @@ class Corners(NamedTuple):
 
 # === Resampling ====
 
-SEED = Path(__file__).resolve().parents[2] / "data" / "seed.npy"  # (2**17, 2) hyperuniform
+SEED = Path(__file__).resolve().parent / "data" / "seed.npy"  # (2**17, 2) hyperuniform, shipped
 
 # A new point is on the surface if it is closer to the input cloud than ON_SURFACE times
 # the local spacing of the cloud (mean distance of the nearest input point to its 6

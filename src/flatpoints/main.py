@@ -16,7 +16,7 @@ from .utils import axes, fill_empty, Chart, Corners, Mesh, _window, _seeds, ON_S
 class Viz:
     """Plots of a `Flat`, as its methods: `flat.plot()` and `flat.imshow(data)`.
 
-    Needs matplotlib (`pip install -e ".[viz]"`), imported only when a plot is drawn.
+    Needs matplotlib (`pip install "flatpoints[viz]"`), imported only when a plot is drawn.
     The drawing itself is in `viz.py`."""
 
     def plot(self, squares=8, point_size=1.0):

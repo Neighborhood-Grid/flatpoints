@@ -1,0 +1,8 @@
+# sdist: the package, licences and docs only. The example point clouds (data/) are
+# third-party and are downloaded on demand (flatpoints.load), the plots stay on GitHub.
+include README.md Method.md LICENSE LICENSE-rectangular-conformal-map
+include src/flatpoints/data/seed.npy
+prune data
+prune plots
+prune data_compressed
+global-exclude __pycache__ *.py[cod]

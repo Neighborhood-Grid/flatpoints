@@ -24,3 +24,10 @@ Except src/flatpoints/rcm.py, a modified port of
 https://github.com/garyptchoi/rectangular-conformal-map, Copyright (c) 2015-2024
 Gary Pui-Tung Choi, licensed under the Apache License 2.0
 (see LICENSE-rectangular-conformal-map).
+
+src/flatpoints/data/seed.npy is a point cloud of the Hyperuniform samples database
+(https://github.com/For-a-few-DPPs-more/hyperuniform-samplers), by R. Bardenet,
+R. Lachièze-Rey and A. de Cacqueray, MIT License.
+
+The example point clouds of data/ (not part of the Python package) are derived from
+third-party models and keep their own terms, see data/README.md.
