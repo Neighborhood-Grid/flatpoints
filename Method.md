@@ -1,44 +1,73 @@
 # Method
 
-flatpoints takes a point cloud sampled on a surface and returns one or two square images: each point of the cloud on its own pixel, neighbour pixels holding neighbour points.
-
-```
-points ──► mesh, cut into disks ──► map onto a square (conformal) ──► gridify (conformal to equal area) ──► image
-```
+flatpoints takes a point cloud sampled on a surface and returns one or two square images:
+each point of the cloud on its own pixel, neighbour pixels holding neighbour points.
 
 This is the *geometry image* of Gu, Gortler & Hoppe (2002), with one difference: no
-resampling. The pixels are the input points themselves, so `flat.pixels` gives the exact
+resampling. The pixels hold the input points themselves, so `flat.pixels` gives the exact
 point <-> pixel correspondence.
+
+The flattening pipeline: 
+
+```
+points ──► mesh, cut into disks ──► conformal map onto the square ──► grid assignment ──► image
+```
+
+The grid assignment (gridification) is the heart of the method. It matches the points to the
+cells of a square grid, one to one (one point = one pixel), which gives a simple data
+structure. By construction, it makes the final mapping roughly area-preserving: each pixel
+covers the area of its point, the same for every point if the cloud is sampled uniformly.
+Gridification is performed with the [gridpoints](https://pypi.org/project/gridpoints/) Python package.
+
 
 ## 1. Mesh and cut
 
 A square is a topological disk, so the surface must first be cut into disks, the faces.
 
-- **Mesh**: mesh the point cloud using screened Poisson reconstruction (open3d) 
-- **Cut**: a closed surface is split into two faces, left and right of the median along
-  `normal_axis`; an open surface is a single face. Faces grow triangle by triangle and
-  only accept triangles that keep them a disk, so handles and holes are left cut open.
-- **Points**: each point is projected onto the mesh and takes the face of its triangle.
+- **Mesh**: screened Poisson reconstruction (open3d) of the point cloud, from normals
+  estimated and oriented on the points; only the largest connected piece is kept. Poisson
+  always closes the surface, so for an open surface (`single_face=True`) the parts far
+  from the points are trimmed.
+- **Cut**: a closed surface is split into two faces, left and right of the median of the
+  points along `normal_axis`; an open surface is a single face. Faces grow triangle by
+  triangle and only accept triangles that keep them a disk, so handles and holes are cut
+  open: their triangles belong to no face.
+- **Points**: each point is projected onto the nearest triangle of a face, and takes that
+  face.
 
 ## 2. Conformal map
 
 Each face is mapped onto the unit square by a rectangular conformal map (Meng, Choi & Lui
-2016). Each point takes the uv_conformal of its projection on the mesh.
+2016). The four corners of the square go to the boundary vertices closest to the corners
+of the face seen along `normal_axis`. Each point takes the conformal uv of its projection,
+interpolated in its triangle.
 
 ## 3. Grid
 
-The points of each face are sorted onto an n x n grid by their uv_conformal (gridpoints). The resulting one to one matching
+The points of each face are assigned to the cells of an n x n grid, each point to its own
+cell, by finding a spatially consistant assignement from the conformal uv coordinates of 
+the points to cells of a grid, with one point matching one cell, up to a few padding cells
+in the corners in case the number of points itself is not a square number, which are kept 
+empty (because the grid has exactly n^2 cells) and filled  a posteriori with duplicate points.
+The resulting one-to-one matching
+
 ```
-point -> pixel = face, row, column
+point -> pixel = (face, row, column)
 ```
-is the final output of the flatpoints. Due to the one to one assignement, the flattening is by construction an area preserving transformation.
+
+is the output of flatpoints.
 
 ## Limits
 
-- **Cuts**: points on either side of a cut are neighbours on the surface but not in the images. This apply to the left / right cut of the single_face = False pipeline, but also on further topological closedness of the surface (e.g. for a torus), which will also be cut.
+- **Cuts**: points on either side of a cut are neighbours on the surface but not in the
+  images. This applies to the left / right cut of a closed surface, and to the extra cuts
+  of handles and holes (e.g. a torus).
 - **Tears**: the grid cannot follow the uv exactly, so a few adjacent pixels hold points
-  several spacings apart (2.7% beyond 3 spacings on the bunny).
-- **Meshing**: since flatpoints operate on point cloud with unkown surface, the overal precision of the flattening will depend on the quality of the meshing performed by open3d.
+  several spacings apart (on the bunny, about 3% of the pairs of adjacent pixels are more
+  than 3 local spacings apart, the local spacing being the mean distance of a point to its
+  6 nearest neighbours).
+- **Meshing**: the surface is unknown and reconstructed from the points, so the quality of
+  the flattening depends on that of the Poisson mesh (sparse or noisy clouds, thin parts).
 
 ## References
 
