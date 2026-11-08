@@ -117,6 +117,27 @@ other = flat.resample(n_points=512, seed=1)  # a new resampling, with different 
 
 ![hyperuniform resampling: comparison](plots_resampling/bunny_comparison.png)
 
+## Application: compressing a point cloud
+
+```bash
+python exemple_compression.py --bunny   # plots_compression/bunny.png
+```
+
+Since neighbour pixels hold neighbour points, the xyz images are smooth, and smooth images
+compress well. `flat.compress` keeps the k largest singular values of each xyz image
+(truncated SVD): k (2n + 1) numbers per image instead of n².
+
+```python
+comp = flat.compress(factor=0.8)  # save 80% of the storage
+comp.U, comp.S, comp.Vt           # the truncated SVD, per face and coordinate
+comp.points                       # (N, 3) reconstructed points, in the input order
+```
+
+On the bunny, saving 80% of the storage moves the points by less than one point spacing
+(median).
+
+![SVD compression of the bunny](plots_compression/bunny.png)
+
 ## Licence
 
 - code: MIT, except `src/flatpoints/rcm.py`.
