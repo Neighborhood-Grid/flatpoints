@@ -33,8 +33,20 @@ How it works: see [Method.md](Method.md).
 
 ## Install
 
+Core only:
+
 ```bash
-pip install -e ".[viz]"   # numpy, scipy, gridpoints, open3d (+ matplotlib)
+pip install -e # numpy, scipy, gridpoints, open3d
+```
+
+Optionals:
+
+```bash
+pip install -e ".[viz]"   # + matplotlib
+```
+
+```bash
+pip install -e ".[compress]" # + PyWavelets, Pillow
 ```
 
 ## Quickstart
