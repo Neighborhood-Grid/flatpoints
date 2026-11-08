@@ -43,9 +43,6 @@ Optionals:
 
 ```bash
 pip install -e ".[viz]"   # + matplotlib
-```
-
-```bash
 pip install -e ".[compress]" # + PyWavelets, Pillow
 ```
 
