@@ -1,7 +1,7 @@
 # Point clouds
 
 Each `*_points.npy` is a `(10000, 3)` array of points sampled uniformly (area-weighted) on the
-surface of a classic 3D test mesh. `bunny_points.npy` is float64, the others float32.
+surface of a classic 3D test mesh, in float32.
 
 ```python
 points = np.load("data/dragon_points.npy")
