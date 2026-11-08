@@ -1,5 +1,6 @@
-"""User-facing classes: `Flat` (point cloud -> images) and `Resampler` (images -> new
-points on the surface). `Viz` adds the plots to `Flat`.
+"""User-facing classes: `Flat` (point cloud -> images), `Resampler` (images -> new points
+on the surface) and `Compressor` (truncated SVD of the images). `Viz` adds the plots to
+`Flat`.
 """
 from functools import cached_property
 
@@ -132,6 +133,11 @@ class Flat(Viz):
         """`n_points` new points evenly spread on the surface, see `Resampler`."""
         return Resampler(self, n_points, seed, sigma)
 
+    def compress(self, factor=0.8):
+        """Truncated SVD of the xyz images, `factor` (e.g. 0.8) of the storage saved,
+        see `Compressor`."""
+        return Compressor(self, factor)
+
     @cached_property
     def _lifting(self):
         """Cached for `Resampler`: xyz images, mask of real pixels, k-d tree and local
@@ -210,3 +216,37 @@ class Resampler:
         With `ax`, only the after view, drawn in `ax`. See `viz.plot_resampler`."""
         from .viz import plot_resampler
         return plot_resampler(self, ax=ax, point_size=point_size, **kwargs)
+
+
+class Compressor:
+    """Compress the points of a `Flat` by a truncated SVD of its xyz images
+    (`flat.compress(factor)`).
+
+    Each image (one per face and per coordinate, n x n) keeps its k largest singular
+    values: k (2n + 1) numbers instead of n². k is the largest rank that saves at least
+    `factor` of the 3N numbers of the points (but at least 1).
+
+    Args:
+        factor: fraction of the storage saved, in [0, 1): 0.8 keeps 20% of the numbers.
+
+    Attributes:
+        U, S, Vt: the truncated SVD, (n_faces, 3, n, k), (n_faces, 3, k), (n_faces, 3, k, n).
+        k: rank kept.
+        ratio: storage actually saved, 1 - (U.size + S.size + Vt.size) / (3N).
+        images: (n_faces, n, n, 3) the reconstructed xyz images.
+        points: (N, 3) the reconstructed points, in the order of `flat.points`.
+    """
+
+    def __init__(self, flat, factor=0.8):
+        if not 0 <= factor < 1:
+            raise ValueError("factor must be in [0, 1), e.g. 0.8 to save 80% of the storage")
+        self.flat, self.factor = flat, factor
+        n, faces = flat.n, flat.n_faces
+        budget = (1 - factor) * flat.points.size  # numbers we may store
+        self.k = k = int(np.clip(budget // (faces * 3 * (2 * n + 1)), 1, n))
+        A = np.moveaxis(flat.to_image(flat.points), -1, 1)  # (n_faces, 3, n, n)
+        U, S, Vt = np.linalg.svd(A, full_matrices=False)
+        self.U, self.S, self.Vt = U[..., :k], S[..., :k], Vt[..., :k, :]
+        self.ratio = 1 - (self.U.size + self.S.size + self.Vt.size) / flat.points.size
+        self.images = np.moveaxis((self.U * self.S[..., None, :]) @ self.Vt, 1, -1)
+        self.points = self.images[tuple(flat.pixels.T)]
