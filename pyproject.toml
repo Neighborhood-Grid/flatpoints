@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 viz = ["matplotlib"]
-compress = ["PyWavelets"]
+compress = ["PyWavelets", "Pillow"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
