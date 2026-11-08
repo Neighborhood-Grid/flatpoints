@@ -133,18 +133,11 @@ def imshow(image, sigma=0.5, cmap="viridis"):
 
 def morph(image, xyz, normal_axis="x", sigma=0.5, cmap="viridis", path=None,
           resolution="low", seconds=1.2, pause=0.5):
-    """Animation, one panel per face: the quads of the face's image fold from the flat
-    image into the surface in 3D, and back. Colours as `imshow` (`image`, `sigma`,
-    `cmap`), shaded as in `plot`; `xyz` (n_faces, n, n, 3): the point of each pixel, e.g.
-    `flat.to_image(flat.points)`, seen as in `plot` (`normal_axis`), at the same scale in
-    all the panels. A morph lasts `seconds`, each end is held `pause` seconds.
-
-    `resolution`: "low" (a few seconds: the grids downsampled to about 40 x 40 pixels,
-    smoothed first) or "high" (all the pixels, 25 frames per second, rendered at twice
-    the size then reduced, no aliasing: up to a minute to write). Saved as an animated
-    WebP (smooth gradients, light, shown by browsers, GitHub and VS Code) to `path`
-    (".webp") if given, played indefinitely (there and back) then still. Returns the
-    matplotlib animation (in a notebook: `IPython.display.HTML(anim.to_jshtml())`)."""
+    """Animation: the images fold into the surface (`xyz`, (n_faces, n, n, 3)) and
+    back, one panel per face; colours as `imshow`. `resolution`: "low" (downsampled, fast)
+    or "high" (every pixel, up to a minute). Saved as .webp to `path` if given. Returns the
+    matplotlib animation.
+    """
     from matplotlib.animation import FuncAnimation
     if resolution not in RESOLUTIONS:
         raise ValueError(f"resolution must be one of {list(RESOLUTIONS)}, got {resolution!r}")

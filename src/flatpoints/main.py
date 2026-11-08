@@ -1,13 +1,5 @@
-"""User-facing classes of flatpoints: `Flat` and `Resampler`.
-
-`Flat` takes points sampled on a surface and builds its images: one or two square
-(n, n) grids with a pixel for each point, idx -> (face, row, column), neighbour pixels
-holding neighbour points (a geometry image of the cloud, see Method.md).
-
-`Flat.resample` (a `Resampler`) uses the images of the flat to transport a 2D point set
-(by default a hyperuniform seed) onto the surface: (row, col) -> xyz.
-
-`Flat.plot` and `Flat.imshow` (from the `Viz` mixin) draw the flat, with matplotlib.
+"""User-facing classes: `Flat` (point cloud -> images) and `Resampler` (images -> new
+points on the surface). `Viz` adds the plots to `Flat`.
 """
 from functools import cached_property
 
@@ -16,7 +8,7 @@ from scipy.ndimage import gaussian_filter, map_coordinates
 from scipy.spatial import cKDTree
 
 from .core import conformal_uv, image_cells
-from .mesh import closest_on_mesh, hemisphere_cut, planar_mesh, poisson_mesh, submesh
+from .mesh import TRIM, closest_on_mesh, disk_cut, hemisphere_cut, poisson_mesh, submesh
 from .utils import axes, fill_empty, Chart, Corners, Mesh, _window, _seeds, ON_SURFACE
 
 
@@ -27,27 +19,17 @@ class Viz:
     The drawing itself is in `viz.py`."""
 
     def plot(self, squares=8, point_size=1.0):
-        """The flattening at a glance. First column: the faces in 3D; then one column per
-        face: its image. First row coloured by RGB = normalised x, y, z, second row by a
-        checkerboard of `squares` x `squares` pixels, the same colours in 3D and on the
-        images: a good flattening gives smooth colours and regular squares on the surface.
-        `point_size` scales the points in 3D. Returns the figure."""
+        """The surface in 3D and its images, coloured by RGB = xyz and by a checkerboard
+        of `squares` pixels: smooth colours and regular squares mean a good flattening.
+        """
         from .viz import plot
         return plot(self, squares, point_size)
 
     def imshow(self, data=None, sigma=0.5, cmap="viridis", animate=False, resolution="low"):
-        """`data` on the images of the flat, one image per face. `data`: per-point values
-        (N, *C), placed by `to_image`, or images already (n_faces, n, n, *C); default:
-        the points, RGB = x, y, z. Smoothed by a Gaussian of `sigma` pixels, coloured by
-        the number of channels C = prod(*C): 1 colormap `cmap`, 2 bivariate colormap,
-        3 RGB, > 3 RGB of the 3 first principal components (see `viz.imshow`).
-        Returns the figure.
-
-        `animate`: True, or a path to save a .webp (animated WebP, played 5 times, then
-        still): instead, the images (same colours) fold into the surface in 3D and back,
-        one panel per face (see `viz.morph`). `resolution`: "low" (a few seconds) or
-        "high" (no aliasing, up to a minute to write). Returns the matplotlib animation (in a
-        notebook: `IPython.display.HTML(anim.to_jshtml())`)."""
+        """`data` on the images: per-point (N, *C) or images (n_faces, n, n, *C),
+        default the xyz of the points. See `viz.imshow` for the colouring, `viz.morph` for
+        `animate` (True, or a .webp path) and `resolution` ("low" or "high").
+        """
         from .viz import imshow, morph
         data = self.points if data is None else np.asarray(data)
         if len(data) != len(self.points):
@@ -63,57 +45,31 @@ class Viz:
 
 
 class Flat(Viz):
-    """Flatten a 3D point cloud into one or two square images, idx -> (face, row, col).
+    """Flatten a 3D point cloud into one or two square images, one pixel per point.
 
-    Each point of the cloud gets one pixel of an (n, n) image, and neighbour pixels hold
-    neighbour points on the surface: the cloud becomes an image, (N, *C) -> (n_faces, n,
-    n, *C), on which 2D tools apply (convolutions, SVD, codecs, CNNs...).
-
-    Pipeline (see Method.md): the surface is meshed (Poisson reconstruction, or 2D
-    Delaunay for an open surface) and cut into one or two topological disks, the faces
-    (left and right of the median of the normal axis). Each point takes the face of its
-    projection on the mesh. Then, per face: rectangular conformal map of the face's mesh
-    onto the unit square, interpolated at the projections of the points; the image sorts
-    the points on the n x n grid by this uv (gridpoints).
+    Neighbour pixels hold neighbour points, so per-point data (N, *C) becomes images
+    (n_faces, n, n, *C). See Method.md for how.
 
     Args:
         points: (N, 3) points sampled on a surface.
-        single_face: one chart and one image for an open surface (e.g. a terrain),
-            instead of two for a closed one.
-        normal_axis: "x", "y" or "z", the axis the surface is seen along. A closed
-            surface is cut across it, in two faces on either side of its median (left
-            and right for "x"); an open surface is roughly normal to it (e.g. "z" for a
-            terrain seen from above). v (the rows of the images, upwards) follows z, or y
-            if normal_axis is "z"; u follows the third axis.
+        single_face: True for an open surface (one image), False for a closed one (two
+            images, the surface cut in left and right halves).
+        normal_axis: "x", "y" or "z". Orients the images (rows follow z, or y if
+            normal_axis is "z") and, for a closed surface, sets the direction of the cut.
         verbose: print progress.
 
     Attributes:
-        n: side of the images; n_faces: number of faces (1 or 2).
-        normal_axis, single_face: the arguments.
+        n, n_faces: side and number of the images.
         pixels: (N, 3) (face, row, col) of each point.
-        faces: {"left": idx, "right": idx} points of each face, None if single_face.
-        corners: padding of the empty pixels: copy points[corners.idxs] into
-            corners.pixels (face, row, col).
-
-    Internals (intermediate steps, kept for inspection):
-        _mesh: `Mesh` (vertices, triangles, face of each triangle) of the surface.
-        _charts: one `Chart` per face (vertices, triangles, uv_conformal of the vertices).
-        _uv_conformal: (N, 2) conformal uv of each point in [0, 1]^2, per face.
-
-    Methods:
-        to_image(values): per-point values (N, ...) on the images, (n_faces, n, n, ...).
-        resample(n_points): new points evenly spread on the surface, a `Resampler`.
-        plot(): the surface in 3D and its images (from `Viz`, needs matplotlib).
-        imshow(data): per-point data or images, one image per face (from `Viz`).
+        faces: {"left": idx, "right": idx}, None if single_face.
+        corners: the points copied into the empty pixels (see `to_image`).
+        _mesh, _charts, _uv_conformal: intermediate steps, for inspection.
 
     Example:
         flat = Flat(points)
         image = flat.to_image(points)       # (2, n, n, 3)
         face, row, col = flat.pixels[42]
-        new = flat.resample(512).points     # (512, 3) new points on the surface
-        flat.plot()                         # 3D and images
-        flat.imshow()                       # the images, RGB = xyz
-        flat.imshow(points[:, 2])           # any per-point data, here the height
+        new = flat.resample(512).points     # (512, 3)
     """
 
     def __init__(self, points, single_face=False, normal_axis="x", verbose=False):
@@ -123,7 +79,8 @@ class Flat(Viz):
 
         # 1. Mesh, cut into charts
         if single_face:
-            V, F, side = planar_mesh(P, P[:, [horiz, vert]])
+            V, F = poisson_mesh(P, trim=TRIM)
+            side = disk_cut(V, F)
         else:
             V, F = poisson_mesh(P)
             side = hemisphere_cut(V, F, normal, np.median(P[:, normal]))
@@ -172,16 +129,14 @@ class Flat(Viz):
         self.corners = Corners(np.concatenate(pad_idxs), np.concatenate(pad_pixels))
 
     def resample(self, n_points=512, seed=42, sigma=0.0):
-        """`n_points` new points evenly spread on the surface (hyperuniform), see
-        `Resampler`. Each call with another `seed` gives an independent resampling,
-        without recomputing the flat."""
+        """`n_points` new points evenly spread on the surface, see `Resampler`."""
         return Resampler(self, n_points, seed, sigma)
 
     @cached_property
     def _lifting(self):
-        """What every resampling of this flat needs, computed once: the xyz images, the
-        mask of real (not padding) pixels, a k-d tree of the points and the local spacing
-        of the cloud (mean distance of each point to its 6 nearest neighbours)."""
+        """Cached for `Resampler`: xyz images, mask of real pixels, k-d tree and local
+        spacing of the points.
+        """
         image = self.to_image(self.points)  # (n_faces, n, n, 3)
         valid = np.ones(image.shape[:3], bool)
         valid[tuple(self.corners.pixels.T)] = False
@@ -190,12 +145,8 @@ class Flat(Viz):
         return image, valid, tree, spacing
 
     def to_image(self, values):
-        """Place per-point `values` (N, ...) on the images, empty pixels filled from the
-        corners: (n_faces, n, n, ...), image[0] being the left face (or the only one)
-        and image[1] the right one.
-
-        E.g. `to_image(points)` is the cloud as an xyz image, `to_image(np.arange(N))` the
-        index of the point in each pixel.
+        """Per-point `values` (N, ...) as images (n_faces, n, n, ...), empty pixels
+        filled from `corners`. E.g. `to_image(points)`: the xyz images.
         """
         values = np.asarray(values)
         image = np.empty((self.n_faces, self.n, self.n) + values.shape[1:], values.dtype)
@@ -205,34 +156,21 @@ class Flat(Viz):
 
 
 class Resampler:
-    """Resample the surface of a `Flat`: `n_points` new points, evenly spread
-    (hyperuniform). Build it with `flat.resample(n_points)`.
+    """`n_points` new points evenly spread on the surface of a `Flat`
+    (`flat.resample(n_points)`).
 
-    The points of a 2D seed in the unit square are placed on the images of the flat and
-    lifted to the surface (row, col -> xyz). Lifted points that fall off the surface
-    (across a tear of the images) are skipped, and replaced by the next points of the seed.
+    A 2D seed is placed on the images and lifted to 3D by bilinear interpolation of the xyz
+    images; points that fall off the surface (across a tear) are replaced by the next ones.
 
     Args:
-        flat: the `Flat` of the point cloud.
-        n_points: total number of new points, split evenly between the faces; if it is
-            odd, one face (drawn from `seed`) gets one more point.
-        seed: one of
-            - int (default 42): the hyperuniform seed data/seed.npy, randomly shifted;
-              another integer gives an independent resampling;
-            - (M, 2) points in [0, 1)^2, used for every face;
-            - {"left": (M, 2), "right": (M, 2)}: points for each face.
+        n_points: split evenly between the faces.
+        seed: int (shift of the default hyperuniform seed), (M, 2) points in [0, 1)^2, or
+            {face name: (M, 2)}.
         sigma: Gaussian smoothing of the images before lifting, in pixels.
 
     Attributes:
-        flat: the `Flat`.
-        points: (n_points, 3) the new points, face by face.
-        faces: (n_points,) face of each new point.
-        pixels: (n_points, 3) (face, row, col) of each new point, row and col as floats.
-
-    Example:
-        sampler = flat.resample(512)
-        new = sampler.points  # (512, 3)
-        sampler.plot()
+        points: (n_points, 3); faces: (n_points,); pixels: (n_points, 3) float
+        (face, row, col).
     """
 
     def __init__(self, flat, n_points=512, seed=42, sigma=0.0):

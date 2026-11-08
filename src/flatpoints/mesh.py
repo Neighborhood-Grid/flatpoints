@@ -1,29 +1,42 @@
-"""Meshes of flatpoints: surface reconstruction, hemisphere cut, points on the mesh.
-
-A closed surface (two faces) is reconstructed from the cloud by screened Poisson (open3d),
-then cut in two topological disks across the median of the normal axis. An open surface
-(single face, e.g. a terrain) is triangulated in its two coordinates other than the
-normal axis.
-"""
+"""Meshes: Poisson reconstruction, cut into disks, projection of the points."""
 import heapq
 
 import numpy as np
-from scipy.spatial import Delaunay
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import dijkstra
+from scipy.spatial import cKDTree
 
 POISSON_DEPTH = 8  # octree depth of the Poisson reconstruction
 KNN_NORMALS = 16   # neighbours used to estimate and orient the normals
-SLIVER = 4.0       # planar mesh: boundary triangles longer than SLIVER x median edge go
+TRIM = 2.0         # open surface: mesh kept within TRIM x the point spacing of the cloud
 
 
 # === Reconstruction ===
 
-def poisson_mesh(points, depth=POISSON_DEPTH):
-    """(V, F) closed mesh of the surface sampled by `points`: its largest piece."""
+def poisson_mesh(points, depth=POISSON_DEPTH, trim=None):
+    """(V, F) mesh of the surface sampled by `points`, screened Poisson: its largest piece.
+
+    Poisson always returns a closed surface. For an open surface, `trim` removes what it
+    invents away from the samples: the vertices farther from the cloud than `trim` times
+    the local point spacing.
+    """
     import open3d as o3d
     cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
     cloud.estimate_normals(o3d.geometry.KDTreeSearchParamKNN(KNN_NORMALS))
-    cloud.orient_normals_consistent_tangent_plane(KNN_NORMALS)
+    try:
+        cloud.orient_normals_consistent_tangent_plane(KNN_NORMALS)
+    except RuntimeError:  # exactly planar cloud: its Delaunay (qhull) is degenerate
+        jitter = 1e-6 * np.ptp(points, 0).max() * np.random.default_rng(0).standard_normal(points.shape)
+        shaken = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points + jitter))
+        shaken.normals = cloud.normals
+        shaken.orient_normals_consistent_tangent_plane(KNN_NORMALS)
+        cloud.normals = shaken.normals
     mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(cloud, depth=depth)
+    if trim is not None:
+        tree = cKDTree(points)
+        spacing = tree.query(points, k=7)[0][:, 1:].mean(1)
+        d, i = tree.query(np.asarray(mesh.vertices))
+        mesh.remove_vertices_by_mask(d > trim * spacing[i])
     mesh.remove_degenerate_triangles()
     mesh.remove_non_manifold_edges()
     piece, sizes, _ = mesh.cluster_connected_triangles()
@@ -32,34 +45,33 @@ def poisson_mesh(points, depth=POISSON_DEPTH):
     return np.asarray(mesh.vertices), np.asarray(mesh.triangles)
 
 
-def planar_mesh(points, ab):
-    """(points, F, side): Delaunay triangulation of the points in their 2D coordinates
-    `ab`, and the disk it keeps (side 0) without the long thin triangles along the convex
-    hull (side -1)."""
-    F = Delaunay(ab).simplices
-    centre = ab[F].mean(1)
-    d = np.linalg.norm(centre - np.median(ab, 0), axis=1)
-    edge = np.linalg.norm(ab[F] - ab[F[:, [1, 2, 0]]], axis=2).max(1)
-    side = np.full(len(F), -1)
-    side[np.argmin(d)] = 0
+# === Cuts ===
+
+def disk_cut(V, F):
+    """Cut the open mesh (V, F) into one disk: (F,) 0 for the triangles of the disk, -1
+    for the others.
+
+    The disk grows from the triangle farthest from the boundary (along the edges of the
+    mesh), the closest triangles first; handles and holes are left open (see `grow`).
+    """
+    E = np.unique(np.sort(F[:, [0, 1, 1, 2, 2, 0]].reshape(-1, 2), 1), axis=0)
+    graph = coo_matrix((np.linalg.norm(V[E[:, 0]] - V[E[:, 1]], axis=1), E.T),
+                       shape=(len(V),) * 2).tocsr()
     nbr = neighbours(F)
-    side = grow(F, nbr, side, [d, d], [edge <= SLIVER * np.median(edge), np.zeros(len(F), bool)])
-    return points, F, drop_ears(nbr, side)
+    border = np.unique(F[nbr < 0])
+    depth = dijkstra(graph, directed=False, indices=border, min_only=True)
+    seed = np.argmax(depth[F].min(1))
+    d = dijkstra(graph, directed=False, indices=F[seed], min_only=True)[F].mean(1)
+    side = np.full(len(F), -1)
+    side[seed] = 0
+    side = grow(F, nbr, side, [d, d], [np.ones(len(F), bool), np.zeros(len(F), bool)])
+    return drop_ears(nbr, side)
 
-
-# === Hemisphere cut ===
 
 def hemisphere_cut(V, F, normal, threshold):
-    """Split the closed mesh (V, F) in two disks across `threshold` on the normal axis
-    (index `normal`).
-
-    Each face grows from its extreme triangle as a sweep along the normal axis, first on
-    its own side of the threshold, then both take what remains, closest to the threshold
-    first. The growth keeps each face a disk (see `grow`), whatever the genus of the mesh:
-    triangles of a handle, that would close a loop, stay out of both faces.
-
-    Returns:
-        (F,) 0 (left), 1 (right) or -1 (out) for each triangle.
+    """(F,) 0 (left), 1 (right) or -1 (out) for each triangle of the closed mesh:
+    two disks, either side of `threshold` on the axis `normal`. Each grows from its extreme
+    triangle (see `grow`); triangles of a handle stay out of both.
     """
     x = V[F, normal].mean(1)
     nbr = neighbours(F)
@@ -73,20 +85,11 @@ def hemisphere_cut(V, F, normal, threshold):
 
 
 def grow(F, nbr, side, keys, allowed):
-    """Grow the faces 0 and 1 of the mesh, keeping each one a topological disk.
+    """Grow faces 0 and 1 from `side` (-1: free), keeping each a topological disk.
 
-    A free triangle joins face s if it shares two edges with it, or one edge and its third
-    vertex is not yet in the face (otherwise it would pinch the face or enclose a hole).
-    Candidates are taken in increasing keys[s], both faces in turn from a single queue.
-
-    Args:
-        F: (nF, 3) triangles; nbr: (nF, 3) their neighbours (see `neighbours`).
-        side: (nF,) current face of each triangle (-1: free); each face must be a disk.
-        keys: two (nF,) priorities, one per face.
-        allowed: two (nF,) masks, the triangles each face may take.
-
-    Returns:
-        (nF,) the new face of each triangle.
+    A free triangle joins face s if it shares two edges with it, or one edge and a third
+    vertex not yet in it. Candidates come in increasing `keys[s]`, among `allowed[s]`.
+    Returns the new `side`.
     """
     side = side.copy()
     Fl, nbl, sl = F.tolist(), nbr.tolist(), side.tolist()

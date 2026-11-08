@@ -48,18 +48,8 @@ def walk_to_real(real, a, b):
 
 
 def fill_empty(cells):
-    """Final grid with its empty cells filled from the corners.
-
-    The grid is cut into four quadrants. Each empty cell takes the point of its quadrant's
-    corner: the first non-empty cell met when walking from that corner towards the centre
-    (see `walk_to_real`).
-
-    Args:
-        cells: (n, n) final grid (image layout), index of each cell's point, -1 for empty
-            cells.
-
-    Returns:
-        (n, n) the same grid, with no -1 left.
+    """`cells` (n, n), -1 for empty, with each empty cell taking the point nearest
+    the corner of its quadrant (see `walk_to_real`).
     """
     n = len(cells)
     real = cells >= 0
