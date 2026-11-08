@@ -82,11 +82,11 @@ to flatten it on a single image.
 to flatten left and right hemispheres independently, on two images.
 
 `normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the \
-surface is seen along: For `single_face = False` (two hemispheres), the left-right cut \
-will be roughly across it, so using a normal axis consistent with your point cloud can \
-help but is not mandatory. With `single_face = True`, normal_axis will just be used for \ 
-the 3D plots. \
-
+surface is seen along. With `single_face = False` (two hemispheres), the surface is cut \
+roughly across it, so it has a strong impact on the result: choose an axis consistent \
+with your point cloud (e.g. the third axis of a PCA). With `single_face = True` (open \
+surface), it only orients the image (which way is up, where the corners go); the mesh \
+itself is built in 3D, without any projection.
 
 See [exemple_flat.py](exemple_flat.py).
 
@@ -125,19 +125,31 @@ python exemple_compression.py --bunny   # plots_compression/bunny.png
 ```
 
 Since neighbour pixels hold neighbour points, the xyz images are smooth, and smooth images
-compress well. `flat.compress` keeps the k largest singular values of each xyz image
-(truncated SVD): k (2n + 1) numbers per image instead of n².
+compress well. `flat.compress` compresses them with one of three methods
+([compressor.py](src/flatpoints/compressor.py)):
+
+- `"dct"`: 2D DCT, quantized and entropy coded per frequency band (as JPEG);
+- `"wavelet"`: 2D wavelets, quantized and entropy coded per subband (as JPEG2000), needs
+  PyWavelets (`pip install -e ".[compress]"`);
+- `"svd"`: truncated SVD of each image.
+
+`factor` is the fraction of the storage saved against the points in float32 (96 bits per
+point), and `method="auto"` (default) keeps the most accurate method.
 
 ```python
-comp = flat.compress(factor=0.8)  # save 80% of the storage
-comp.U, comp.S, comp.Vt           # the truncated SVD, per face and coordinate
+comp = flat.compress(factor=0.8)  # save 80% of the storage, best method
+comp.method                       # "dct"
+comp.code                         # what is stored, e.g. quantized DCT coefficients and step
 comp.points                       # (N, 3) reconstructed points, in the input order
+flat.compress(0.8, method="svd")  # a given method
 ```
 
-On the bunny, saving 80% of the storage moves the points by less than one point spacing
-(median).
+On the bunny, saving 80% of the storage (19 bits per point), the DCT moves the points by
+0.014 point spacing (RMS), the SVD by 1.1. Even at 99% (1 bit per point), the DCT stays
+around one point spacing. The sizes of dct and wavelet are those of an ideal entropy
+coder: a real one is a few percent larger.
 
-![SVD compression of the bunny](plots_compression/bunny.png)
+![compression of the bunny](plots_compression/bunny.png)
 
 ## Licence
 
