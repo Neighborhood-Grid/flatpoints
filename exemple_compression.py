@@ -67,4 +67,11 @@ if __name__ == "__main__":
 
     Path("plots_compression").mkdir(exist_ok=True)
     fig.savefig(f"plots_compression/{model}.png", dpi=100)
+
+    # A real file: the points in JPEG2000 (any JPEG2000 reader opens it), and back
+    Path("data_compressed").mkdir(exist_ok=True)
+    size = comp.save(f"data_compressed/{model}.jp2")
+    print("file     ", f"data_compressed/{model}.jp2: {size} bytes "
+          f"({8 * size / len(points):.1f} bits per point)")
+    print("read     ", fp.Compressor.read(f"data_compressed/{model}.jp2").shape)  # (N, 3)
     plt.show()
