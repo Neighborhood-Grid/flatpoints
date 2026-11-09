@@ -18,7 +18,7 @@ Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
 [▶️ bunny 🐇 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/bunny.webp) \
 [▶️ dragon🐉 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/dragon.webp) \
-[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) \
+[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) 
 
 flatpoints takes a raw point cloud `(N, 3)` and arranges its points on a square `(n, n)`
 grid of pixels:
@@ -91,12 +91,7 @@ to flatten it on a single image.
 - Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
 to flatten left and right hemispheres independently, on two images.
 
-`normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the \
-surface is seen along. With `single_face = False` (two hemispheres), the surface is cut \
-roughly across it, so it has a strong impact on the result: choose an axis consistent \
-with your point cloud (e.g. the third axis of a PCA). With `single_face = True` (open \
-surface), it only orients the image (which way is up, where the corners go); the mesh \
-itself is built in 3D, without any projection.
+`normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the surface is seen along. With `single_face = False` (two hemispheres), the surface is cut roughly across it. Any given normal axis will work properly, but it will impact the resulting cut. With `single_face = True` (open surface), the normal axis will only be used to orient the image (which way is up, where the corners go).
 
 See `fp.exemple_flat` ([examples.py](https://github.com/neighborhood-grid/flatpoints/blob/main/src/flatpoints/examples.py)).
 
