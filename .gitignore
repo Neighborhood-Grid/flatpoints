@@ -6,5 +6,6 @@ dist/
 .ipynb_checkpoints/
 .venv/
 .vscode/
+.test/
 data_compressed/
 *.ipynb/

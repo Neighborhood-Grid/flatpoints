@@ -18,7 +18,7 @@ Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 
 [▶️ bunny 🐇 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/bunny.webp) \
 [▶️ dragon🐉 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/dragon.webp) \
-[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) 
+[▶️ elephant 🐘 ](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/animation/elephant.webp) \
 
 flatpoints takes a raw point cloud `(N, 3)` and arranges its points on a square `(n, n)`
 grid of pixels:
@@ -67,6 +67,7 @@ z = xyz[:, -1] #(N, *C) any data related to the point cloud, e.g. the z coordina
 # ==== Build the flat object ============
 
 flat = fp.Flat(xyz) # Apply the flattening processing of the surface
+# flat = fp.Flat(xyz, mesh=(vertices, triangles))  # giving your mesh as additional input (optional).
 
 # ==== Use it: pixels and images ========
 
@@ -90,11 +91,12 @@ to flatten it on a single image.
 - Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
 to flatten left and right hemispheres independently, on two images.
 
-Cutting relies on the `normal_axis` (`"x"` by default, `"y"` or `"z"`) to define the
-left and right hemispheres of the surface. A different `normal_axis` will result in a
-different flattening, but any cutting direction should work. With `single_face=True`,
-there is no cut and `normal_axis` only orients the image (which way is up, where the
-corners go).
+`normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the \
+surface is seen along. With `single_face = False` (two hemispheres), the surface is cut \
+roughly across it, so it has a strong impact on the result: choose an axis consistent \
+with your point cloud (e.g. the third axis of a PCA). With `single_face = True` (open \
+surface), it only orients the image (which way is up, where the corners go); the mesh \
+itself is built in 3D, without any projection.
 
 See `fp.exemple_flat` ([examples.py](https://github.com/neighborhood-grid/flatpoints/blob/main/src/flatpoints/examples.py)).
 
@@ -107,21 +109,25 @@ fp.exemple_sampler("bunny", save="plots")      # plots/resampling/bunny_resample
 Sampling from a mesh is easy: sample uniformly on each triangle. Resampling from a point
 cloud is harder, because there is no surface to sample from, only points.
 
-The images provide that missing surface: `to_image(xyz)` maps the 3D cloud onto the unit 2D square. 
-So one can sample points in the square and transport them onto the surface by
+The images provide that missing surface: `to_image(xyz)` maps the unit square onto the
+cloud. So one can sample points in the unit square and transport them onto the surface by
 bilinear interpolation of the xyz image, (row, col) → xyz.
 
 By default, `flat.resample` uses a hyperuniform 2D seed (blue noise), so the new points are
-fairly evenly spread over the surface.
+fairly evenly spread over the surface. If method = "ot" is used, the initial resampling is
+optimised further using Optimal Transport.
 
 ```python
-sampler = flat.resample(n_points=512)   # n new points in total
+sampler = flat.resample(n_points=512, method="ot")   # n new points in total
 new = sampler.points                    # (512, 3)
 sampler.plot()                          # before / after
-other = flat.resample(n_points=512, seed=1)  # a new resampling, with different seed
 ```
+
 **To be honest:** if you only need a subset of the input points, farthest point sampling
-(FPS) are more uniform than flatpoints (figure below), this is mainly an exemple usecase to show how to use the images to transport properties (like good spatial repartition) from the simple unit square to an arbitrary surface.
+(FPS) is roughly as uniform as flatpoints (fps has slightly smaller worst case hole and 
+flatpoints.resample slitghly lower ot loss), this is mainly an example usecase to show how 
+to use the images to transport properties like good spatial repartition from the simple unit 
+square to an arbitrary surface.
 
 
 ![hyperuniform resampling: comparison](https://raw.githubusercontent.com/neighborhood-grid/flatpoints/main/plots/resampling/bunny_comparison.png)

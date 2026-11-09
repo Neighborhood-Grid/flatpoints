@@ -89,7 +89,7 @@ def plot_resampler(sampler, ax=None, point_size=1.0, light=0.45, radius=None):
         if len(mine):  # shade of a point: the one of the nearest quad
             _, near = cKDTree(_quads(g["xyz"]).mean(2).reshape(-1, 3)).query(mine)
             layers.append(disc_layer(mine @ proj.T, rgb(mine, flat.points),
-                                     shade.ravel()[near], radius, push=radius, sides=10))
+                                     shade.ravel()[near], radius, push=3 * radius, sides=10))
     render(ax, layers)
     return ax.figure
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flatpoints"
-version = "1.0.0"
+version = "1.1.0"
 description = "Flatten a point cloud into square images where neighbour pixels are neighbour points"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = "MIT AND Apache-2.0"  # MIT, except src/flatpoints/rcm.py (Apache-2.0)

@@ -9,7 +9,8 @@ from scipy.ndimage import gaussian_filter, map_coordinates
 from scipy.spatial import cKDTree
 
 from .core import conformal_uv, image_cells
-from .mesh import TRIM, closest_on_mesh, disk_cut, hemisphere_cut, poisson_mesh, submesh
+from .mesh import TRIM, closest_on_mesh, disk_cut, given_mesh, hemisphere_cut, poisson_mesh, submesh
+from .resampler import lloyd_ot
 from .utils import axes, fill_empty, Chart, Corners, Mesh, _window, _seeds, ON_SURFACE
 
 
@@ -53,6 +54,9 @@ class Flat(Viz):
 
     Args:
         points: (N, 3) points sampled on a surface.
+        mesh: optional mesh of the surface, used instead of the Poisson reconstruction:
+            (vertices (V, 3), triangles (F, 3)), or any object with `vertices` and
+            `faces` (or `triangles`), e.g. trimesh, open3d. The points are projected on it.
         single_face: True for an open surface (one image), False for a closed one (two
             images, the surface cut in left and right halves).
         normal_axis: "x", "y" or "z". Orients the images (rows follow z, or y if
@@ -73,17 +77,19 @@ class Flat(Viz):
         new = flat.resample(512).points     # (512, 3)
     """
 
-    def __init__(self, points, single_face=False, normal_axis="x", verbose=False):
+    def __init__(self, points, single_face=False, normal_axis="x", verbose=False, mesh=None):
         self.points = P = np.asarray(points, float)
         self.normal_axis, self.single_face = normal_axis, single_face
         normal, horiz, vert = axes(normal_axis)
 
         # 1. Mesh, cut into charts
+        if mesh is not None:
+            V, F = given_mesh(mesh)
+        else:
+            V, F = poisson_mesh(P, trim=TRIM if single_face else None)
         if single_face:
-            V, F = poisson_mesh(P, trim=TRIM)
             side = disk_cut(V, F)
         else:
-            V, F = poisson_mesh(P)
             side = hemisphere_cut(V, F, normal, np.median(P[:, normal]))
         self._mesh = Mesh(V, F, side)
         if verbose:
@@ -129,9 +135,9 @@ class Flat(Viz):
 
         self.corners = Corners(np.concatenate(pad_idxs), np.concatenate(pad_pixels))
 
-    def resample(self, n_points=512, seed=42, sigma=0.0):
+    def resample(self, n_points=512, seed=42, sigma=0.0, method="seed", n_iter=10):
         """`n_points` new points evenly spread on the surface, see `Resampler`."""
-        return Resampler(self, n_points, seed, sigma)
+        return Resampler(self, n_points, seed, sigma, method, n_iter)
 
     def compress(self, factor=0.8, method="auto"):
         """Compress the points, `factor` (e.g. 0.8) of the storage saved, with `method`
@@ -173,13 +179,15 @@ class Resampler:
         seed: int (shift of the default hyperuniform seed), (M, 2) points in [0, 1)^2, or
             {face name: (M, 2)}.
         sigma: Gaussian smoothing of the images before lifting, in pixels.
+        method: "seed" (the seed lifted to 3D) or "ot" (then `n_iter` Lloyd iterations of
+            optimal transport onto the input cloud, see `resampler.py`).
 
     Attributes:
         points: (n_points, 3); faces: (n_points,); pixels: (n_points, 3) float
         (face, row, col).
     """
 
-    def __init__(self, flat, n_points=512, seed=42, sigma=0.0):
+    def __init__(self, flat, n_points=512, seed=42, sigma=0.0, method="seed", n_iter=10):
         self.flat, self.n_points, self.sigma = flat, n_points, sigma
         names = ("main",) if flat.single_face else ("left", "right")
         if n_points < len(names):
@@ -210,6 +218,10 @@ class Resampler:
         self.points = np.concatenate(points)
         self.pixels = np.concatenate(pixels)
         self.faces = self.pixels[:, 0].astype(int)
+        if method == "ot":
+            self.points, self.pixels = lloyd_ot(flat, self.points, self.pixels, n_iter)
+        elif method != "seed":
+            raise ValueError('method must be "seed" or "ot"')
 
     def plot(self, ax=None, point_size=1.0, **kwargs):
         """Before (input cloud, left) / after (new points on its mesh, right), in 3D.

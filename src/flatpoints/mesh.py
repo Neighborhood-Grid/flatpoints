@@ -37,6 +37,32 @@ def poisson_mesh(points, depth=POISSON_DEPTH, trim=None):
         spacing = tree.query(points, k=7)[0][:, 1:].mean(1)
         d, i = tree.query(np.asarray(mesh.vertices))
         mesh.remove_vertices_by_mask(d > trim * spacing[i])
+    return clean(mesh)
+
+
+def given_mesh(mesh):
+    """(V, F) of a mesh given by the user, in the standard format: (vertices (V, 3),
+    triangles (F, 3)), or any object with `vertices` and `faces` (or `triangles`), e.g.
+    trimesh, open3d. Cleaned like the Poisson mesh, duplicated vertices merged first."""
+    import open3d as o3d
+    if isinstance(mesh, (tuple, list)):
+        V, F = mesh
+    else:
+        V = mesh.vertices  # faces first: trimesh.triangles are (F, 3, 3) coordinates
+        F = mesh.faces if hasattr(mesh, "faces") else mesh.triangles
+    V, F = np.asarray(V, float), np.asarray(F)
+    if V.ndim != 2 or V.shape[1] != 3 or F.ndim != 2 or F.shape[1] != 3:
+        raise ValueError("mesh: (vertices (V, 3), triangles (F, 3)), got "
+                         f"{V.shape} and {F.shape}")
+    mesh = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V),
+                                     o3d.utility.Vector3iVector(F.astype(np.int32)))
+    mesh.remove_duplicated_vertices()
+    return clean(mesh)
+
+
+def clean(mesh):
+    """(V, F) of the open3d `mesh` without degenerate triangles nor non-manifold edges,
+    its largest piece only."""
     mesh.remove_degenerate_triangles()
     mesh.remove_non_manifold_edges()
     piece, sizes, _ = mesh.cluster_connected_triangles()
