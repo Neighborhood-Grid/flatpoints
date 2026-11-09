@@ -23,9 +23,9 @@ Turn a 3D point cloud sampled on a latent (unknown) surface into something flat.
 flatpoints takes a raw point cloud `(N, 3)` and arranges its points on a square `(n, n)`
 grid of pixels:
 
-- **one pixel per point**: each point gets its own pixel, idx -> (row, column)
-- **neighbour pixels hold neighbour points**: two adjacent pixels hold two points close
-  on the surface, so the image is a continuous picture of the surface.
+- **one pixel per point**: each point gets its own pixel. \
+ idx -> (row, column)
+- **neighbour pixels hold neighbour points**: two adjacent pixels hold two points close on the surface, so the image is a continuous picture of the surface.
 
 Any data attached to the points, `(N, *C)`, then becomes an image `(n, n, *C)`: the xyz
 coordinates, normals, colours, features... and the whole 2D toolbox applies to the point
