@@ -91,7 +91,7 @@ to flatten it on a single image.
 - Use `fp.Flat(points, single_face=False)` for a closed surface (e.g. a dragon), \
 to flatten left and right hemispheres independently, on two images.
 
-`normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) is the axis the surface is seen along. With `single_face = False` (two hemispheres), the surface is cut roughly across it. Any given normal axis will work properly, but it will impact the resulting cut. With `single_face = True` (open surface), the normal axis will only be used to orient the image (which way is up, where the corners go).
+One can specify a `normal_axis` (fp.Flat(points, single_face=..., normal_axis = "x")) to control which axis the surface is seen along. With `single_face = False` (two hemispheres), the surface is cut roughly across it. Any given normal axis will work properly, but it will result in a different cut. With `single_face = True` (open surface), the normal axis will only be used to orient the image (which way is up, where the corners go).
 
 See `fp.exemple_flat` ([examples.py](https://github.com/neighborhood-grid/flatpoints/blob/main/src/flatpoints/examples.py)).
 
