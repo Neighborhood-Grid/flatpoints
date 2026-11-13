@@ -16,7 +16,7 @@ points ──► mesh, cut into disks topology ──► conformal map onto the 
 The grid assignment (gridification) is the heart of the method. It matches the points to the
 cells of a square grid, one to one (one point = one pixel), which gives a simple data
 structure. By construction, it makes the final mapping roughly area-preserving: each pixel
-covers the area of its point, the same for every point if the cloud is sampled uniformly.
+covers the area of its assigned point, the same for every point if the cloud is sampled uniformly.
 Gridification is performed with the [gridpoints](https://pypi.org/project/gridpoints/) Python package.
 
 
