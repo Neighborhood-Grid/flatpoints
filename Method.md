@@ -1,6 +1,6 @@
 # Method
 
-flatpoints takes a point cloud sampled on a surface and returns one or two square images:
+flatpoints takes a point cloud sampled on a surface and returns square images:
 each point of the cloud on its own pixel, neighbour pixels holding neighbour points.
 
 This is the *geometry image* of Gu, Gortler & Hoppe (2002), with one difference: no
@@ -10,7 +10,7 @@ point <-> pixel correspondence.
 The flattening pipeline: 
 
 ```
-points ──► mesh, cut into disks ──► conformal map onto the square ──► grid assignment ──► image
+points ──► mesh, cut into disks topology ──► conformal map onto the square ──► grid assignment ──► image
 ```
 
 The grid assignment (gridification) is the heart of the method. It matches the points to the
